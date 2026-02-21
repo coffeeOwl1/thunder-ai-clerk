@@ -65,11 +65,11 @@ function formatDatetime(date) {
   });
 }
 
+// Returns today's date only — used as the "not in the past" reference in prompts.
+// Deliberately omits time for the same reason as formatDatetime().
 function currentDatetime() {
-  return new Date().toLocaleString("en-US", {
+  return new Date().toLocaleDateString("en-US", {
     year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", minute: "2-digit", second: "2-digit",
-    hour12: false,
   });
 }
 

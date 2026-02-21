@@ -78,7 +78,7 @@ function buildCalendarPrompt(emailBody, subject, mailDatetime, currentDt, attend
 - Full day (if mentioned)
 - Attendees
 Ensure the data is formatted clearly and consistently so that it can be directly used for creating a calendar event.
-If there are relative time references, consider that the date and time of the email are "${mailDatetime}". Calculate the start date and time based on this reference. If the calculated start date and time are earlier than "${currentDt}", recalculate the start date and time using "${currentDt}" as the base.
+If there are relative date references, consider that the date the email was sent is "${mailDatetime}". Calculate the start date based on this reference. If the calculated start date is earlier than "${currentDt}", recalculate the start date using "${currentDt}" as the base.
 If the duration is not specified, set it to one hour.
 ${attendeeLine}
 If you're not able to get one or more of the required information, please respond with an empty string for that field.
@@ -103,7 +103,7 @@ function buildTaskPrompt(emailBody, subject, mailDatetime, currentDt, categories
 - Task summary
 - Initial Date and Time (including timezone, if specified)
 Ensure the data is formatted clearly and consistently so that it can be directly used for creating a task.
-If there are relative time references, consider that the date and time of the email are "${mailDatetime}". Calculate the start date and time based on this reference. If the calculated start date and time are earlier than "${currentDt}", recalculate the start date and time using "${currentDt}" as the base.
+If there are relative date references, consider that the date the email was sent is "${mailDatetime}". Calculate the start date based on this reference. If the calculated start date is earlier than "${currentDt}", recalculate the start date using "${currentDt}" as the base.
 If you're not able to get one or more of the required information, please respond with an empty string for that field.
 ${categoryInstruction}
 Generate a response in JSON format only. Do not include any additional text or explanations; provide only the JSON. Here is the format to be used:

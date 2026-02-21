@@ -11,6 +11,7 @@ const {
   isValidHostUrl,
   extractTextBody,
   formatDatetime,
+  currentDatetime,
 } = require("../utils.js");
 
 // ---------------------------------------------------------------------------
@@ -385,5 +386,24 @@ describe("formatDatetime", () => {
     expect(typeof result).toBe("string");
     expect(result.length).toBeGreaterThan(0);
     expect(result).not.toMatch(/\d{2}:\d{2}/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// currentDatetime
+// ---------------------------------------------------------------------------
+describe("currentDatetime", () => {
+  test("returns a non-empty string", () => {
+    expect(typeof currentDatetime()).toBe("string");
+    expect(currentDatetime().length).toBeGreaterThan(0);
+  });
+
+  test("returns date-only (no time component)", () => {
+    expect(currentDatetime()).not.toMatch(/\d{2}:\d{2}/);
+  });
+
+  test("contains the current year", () => {
+    const year = String(new Date().getFullYear());
+    expect(currentDatetime()).toContain(year);
   });
 });
