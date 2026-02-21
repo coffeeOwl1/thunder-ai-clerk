@@ -122,15 +122,22 @@ function addHoursToCalDate(dateStr, hours) {
 }
 
 // Apply sensible time defaults to a calendar event data object after
-// date normalization. All rules are skipped for all-day events.
+// date normalization.
 //
+// All-day events: endDate is set to startDate if missing (required by schema).
+// Timed events:
 //  - Start time missing (T000000): default to 9:00 AM
-//  - End date/time missing, empty, or timeless (T000000): start + 1 hour
-//  - Start was date-only: end is always overridden to start + 1 hour,
-//    because if the email had no time the AI's end-time guess is unreliable
+//  - End missing/timeless on the SAME DAY as start: default to start + 1 hour
+//    (catches both missing end and AI end-of-day guesses like T235900)
+//  - End on a DIFFERENT day: preserved as-is (multi-day event)
 function applyCalendarDefaults(data) {
-  if (data.forceAllDay) return data;
-  if (!data.startDate)  return data;
+  if (!data.startDate) return data;
+
+  if (data.forceAllDay) {
+    // endDate is required by CalendarTools schema even for all-day events
+    if (!data.endDate) data.endDate = data.startDate;
+    return data;
+  }
 
   const startWasDateOnly = data.startDate.endsWith("T000000");
 
@@ -139,10 +146,17 @@ function applyCalendarDefaults(data) {
     data.startDate = data.startDate.slice(0, 9) + "090000";
   }
 
-  // If the email had no time at all, or end is missing/timeless, default
-  // end to start + 1 hour (ignore any AI-guessed end-of-day value).
-  if (startWasDateOnly || !data.endDate || data.endDate.endsWith("T000000")) {
+  if (!data.endDate) {
+    // End completely missing — always default to start + 1 hour
     data.endDate = addHoursToCalDate(data.startDate, 1);
+  } else {
+    const startDay = data.startDate.slice(0, 8);
+    const endDay   = data.endDate.slice(0, 8);
+    if (startDay === endDay && (startWasDateOnly || data.endDate.endsWith("T000000"))) {
+      // Same-day event with no real time — default to start + 1 hour
+      data.endDate = addHoursToCalDate(data.startDate, 1);
+    }
+    // Different-day end is preserved (multi-day event)
   }
 
   return data;

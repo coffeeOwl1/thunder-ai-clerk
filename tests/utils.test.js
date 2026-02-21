@@ -118,11 +118,25 @@ describe("applyCalendarDefaults", () => {
     expect(data.endDate).toBe("20260225T153000");
   });
 
-  test("skips all defaults for all-day events", () => {
-    const data = { startDate: "20260225T000000", endDate: "", forceAllDay: true };
+  test("all-day event: leaves startDate alone but sets missing endDate to startDate", () => {
+    const data = { startDate: "20260225T000000", forceAllDay: true };
     applyCalendarDefaults(data);
     expect(data.startDate).toBe("20260225T000000");
-    expect(data.endDate).toBe("");
+    expect(data.endDate).toBe("20260225T000000");
+  });
+
+  test("all-day event: preserves existing endDate on a different day", () => {
+    const data = { startDate: "20260302T000000", endDate: "20260306T000000", forceAllDay: true };
+    applyCalendarDefaults(data);
+    expect(data.startDate).toBe("20260302T000000");
+    expect(data.endDate).toBe("20260306T000000");
+  });
+
+  test("multi-day event: preserves end on a different day when start was date-only", () => {
+    const data = { startDate: "20260302T000000", endDate: "20260306T000000" };
+    applyCalendarDefaults(data);
+    expect(data.startDate).toBe("20260302T090000"); // 9am applied
+    expect(data.endDate).toBe("20260306T000000");   // multi-day end preserved
   });
 
   test("handles missing startDate gracefully", () => {
