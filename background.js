@@ -52,6 +52,7 @@ browser.menus.create({
 function normalizeCalendarData(data) {
   if (data.startDate) data.startDate = normalizeCalDate(data.startDate);
   if (data.endDate)   data.endDate   = normalizeCalDate(data.endDate);
+  data.forceAllDay = !!data.forceAllDay; // schema requires this field
   return data;
 }
 
