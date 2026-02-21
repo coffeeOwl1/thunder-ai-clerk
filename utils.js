@@ -207,6 +207,7 @@ function buildDescription(emailBody, author, subject, format) {
     case "body":
       return emailBody;
     case "none":
+    case "ai_summary":
       return null;
     case "body_from_subject":
     default:
@@ -236,11 +237,15 @@ function isValidHostUrl(str) {
   }
 }
 
-function buildCalendarPrompt(emailBody, subject, mailDatetime, currentDt, attendeeHints, categories) {
+function buildCalendarPrompt(emailBody, subject, mailDatetime, currentDt, attendeeHints, categories, includeDescription) {
   const attendeeLine = attendeeHints.length > 0
     ? `These are the attendees: ${attendeeHints.join(", ")}.`
     : "";
   const { instruction: categoryInstruction, jsonLine: categoryJsonLine } = buildCategoryInstruction(categories);
+
+  const descriptionLine = includeDescription
+    ? ',\n"description": "A brief 1-2 sentence summary of the event described in the email"'
+    : "";
 
   return `Extract calendar event details from the following email.
 
@@ -261,15 +266,18 @@ Respond with JSON only — no explanation, no markdown fences. Use this structur
 "endDate": "YYYYMMDD or YYYYMMDDTHHMMSS",
 "summary": "Event title",
 "forceAllDay": false,
-"attendees": ["attendee1@example.com", "attendee2@example.com"]${categoryJsonLine}
+"attendees": ["attendee1@example.com", "attendee2@example.com"]${categoryJsonLine}${descriptionLine}
 }
 Omit any field you cannot determine from the email.
 Subject: "${subject}"
 Email body: "${emailBody}"`;
 }
 
-function buildTaskPrompt(emailBody, subject, mailDatetime, currentDt, categories) {
+function buildTaskPrompt(emailBody, subject, mailDatetime, currentDt, categories, includeDescription) {
   const { instruction: categoryInstruction, jsonLine: categoryJsonLine } = buildCategoryInstruction(categories);
+  const descriptionLine = includeDescription
+    ? ',\n"description": "A brief 1-2 sentence summary of the task described in the email"'
+    : "";
 
   return `Extract task details from the following email.
 
@@ -283,7 +291,7 @@ Respond with JSON only — no explanation, no markdown fences. Use this structur
 {
 "initialDate": "YYYYMMDD or YYYYMMDDTHHMMSS",
 "dueDate": "YYYYMMDD or YYYYMMDDTHHMMSS",
-"summary": "Task summary"${categoryJsonLine}
+"summary": "Task summary"${categoryJsonLine}${descriptionLine}
 }
 Omit any field you cannot determine from the email.
 Subject: "${subject}"

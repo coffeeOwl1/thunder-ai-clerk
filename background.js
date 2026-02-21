@@ -11,9 +11,9 @@ const DEFAULTS = {
   attendeesSource:         "from_to",          // "from_to" | "from" | "to" | "static" | "none"
   attendeesStatic:         "",
   defaultCalendar:         "",                 // "" = use currently selected
-  descriptionFormat:       "body_from_subject", // "body_from_subject" | "body" | "none"
+  descriptionFormat:       "body_from_subject", // "body_from_subject" | "body" | "none" | "ai_summary"
   // Task settings
-  taskDescriptionFormat:   "body_from_subject", // "body_from_subject" | "body" | "none"
+  taskDescriptionFormat:   "body_from_subject", // "body_from_subject" | "body" | "none" | "ai_summary"
   taskDefaultDue:          "none",             // "none" | "7" | "14" | "30" (days from now)
   // Category settings
   calendarUseCategory:     false,
@@ -174,9 +174,12 @@ browser.menus.onClicked.addListener(async (info, tab) => {
   }
 
   // Build prompt
+  const wantAiDescription = isCalendar
+    ? descriptionFormat === "ai_summary"
+    : taskDescriptionFormat === "ai_summary";
   const prompt = isCalendar
-    ? buildCalendarPrompt(emailBody, subject, mailDatetime, currentDt, attendeeHints, categories)
-    : buildTaskPrompt(emailBody, subject, mailDatetime, currentDt, categories);
+    ? buildCalendarPrompt(emailBody, subject, mailDatetime, currentDt, attendeeHints, categories, wantAiDescription)
+    : buildTaskPrompt(emailBody, subject, mailDatetime, currentDt, categories, wantAiDescription);
 
   // Call Ollama — show a progress notification while we wait
   const THINKING_ID = "thunderclerk-ai-thinking";
@@ -221,9 +224,14 @@ browser.menus.onClicked.addListener(async (info, tab) => {
 
     applyCalendarDefaults(parsed);
 
-    // Inject description (built from email metadata, not AI-extracted)
-    const description = buildDescription(emailBody, author, subject, descriptionFormat);
-    if (description) parsed.description = description;
+    // Inject description
+    if (descriptionFormat === "ai_summary") {
+      // Keep the AI-extracted description; fall back to subject if absent
+      if (!parsed.description) parsed.description = subject;
+    } else {
+      const description = buildDescription(emailBody, author, subject, descriptionFormat);
+      if (description) parsed.description = description;
+    }
 
     // Inject calendar preference
     if (defaultCalendar) parsed.calendar_name = defaultCalendar;
@@ -248,8 +256,12 @@ browser.menus.onClicked.addListener(async (info, tab) => {
     }
 
     // Description for tasks
-    const taskDescription = buildDescription(emailBody, author, subject, taskDescriptionFormat);
-    if (taskDescription) parsed.description = taskDescription;
+    if (taskDescriptionFormat === "ai_summary") {
+      if (!parsed.description) parsed.description = subject;
+    } else {
+      const taskDescription = buildDescription(emailBody, author, subject, taskDescriptionFormat);
+      if (taskDescription) parsed.description = taskDescription;
+    }
   }
 
   // iCal all-day events use an exclusive DTEND (the day *after* the last

@@ -9,6 +9,7 @@
 
 const {
   buildCalendarPrompt,
+  buildTaskPrompt,
   extractJSON,
   normalizeCalDate,
   advancePastYear,
@@ -297,6 +298,18 @@ describe("calendar integration", () => {
     expect(result.forceAllDay).toBe(false);
     expectDate(result.startDate, "20260403");
     expect(result.startDate).toContain("T093000");
+  });
+
+  // --- AI-generated description ---
+
+  itOnline("includeDescription → AI returns a non-empty description string", async () => {
+    const emailBody = "Hi team, please join us for the Q1 review presentation on March 10, 2026 at 2pm in Conference Room B. We will cover revenue targets, customer feedback, and plans for Q2.";
+    const subject = "Q1 Review Presentation";
+    const prompt = buildCalendarPrompt(emailBody, subject, MAIL_DATE, TODAY, [], null, true);
+    const raw = await callOllama(prompt);
+    const parsed = JSON.parse(extractJSON(raw));
+    expect(typeof parsed.description).toBe("string");
+    expect(parsed.description.length).toBeGreaterThan(0);
   });
 
 });

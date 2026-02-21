@@ -9,6 +9,8 @@ const {
   buildAttendeesHint,
   buildDescription,
   buildCategoryInstruction,
+  buildCalendarPrompt,
+  buildTaskPrompt,
   isValidHostUrl,
   extractTextBody,
   formatDatetime,
@@ -275,6 +277,10 @@ describe("buildDescription", () => {
     expect(buildDescription(body, author, subject, "none")).toBeNull();
   });
 
+  test("ai_summary returns null", () => {
+    expect(buildDescription(body, author, subject, "ai_summary")).toBeNull();
+  });
+
   test("unknown format defaults to body_from_subject", () => {
     const result = buildDescription(body, author, subject, "unknown");
     expect(result).toContain(`From: ${author}`);
@@ -297,6 +303,58 @@ describe("buildCategoryInstruction", () => {
     expect(instruction).toContain("Work");
     expect(instruction).toContain("Personal");
     expect(jsonLine).toContain("category");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildCalendarPrompt — includeDescription
+// ---------------------------------------------------------------------------
+describe("buildCalendarPrompt includeDescription", () => {
+  const body = "Team lunch on Friday";
+  const subject = "Lunch";
+  const mailDt = "02/20/2026";
+  const curDt = "02/20/2026";
+
+  test("omits description field by default", () => {
+    const prompt = buildCalendarPrompt(body, subject, mailDt, curDt, [], null);
+    expect(prompt).not.toContain('"description"');
+  });
+
+  test("omits description field when includeDescription is false", () => {
+    const prompt = buildCalendarPrompt(body, subject, mailDt, curDt, [], null, false);
+    expect(prompt).not.toContain('"description"');
+  });
+
+  test("includes description field when includeDescription is true", () => {
+    const prompt = buildCalendarPrompt(body, subject, mailDt, curDt, [], null, true);
+    expect(prompt).toContain('"description"');
+    expect(prompt).toContain("brief 1-2 sentence summary");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildTaskPrompt — includeDescription
+// ---------------------------------------------------------------------------
+describe("buildTaskPrompt includeDescription", () => {
+  const body = "Please submit the report by Friday";
+  const subject = "Report deadline";
+  const mailDt = "02/20/2026";
+  const curDt = "02/20/2026";
+
+  test("omits description field by default", () => {
+    const prompt = buildTaskPrompt(body, subject, mailDt, curDt, null);
+    expect(prompt).not.toContain('"description"');
+  });
+
+  test("omits description field when includeDescription is false", () => {
+    const prompt = buildTaskPrompt(body, subject, mailDt, curDt, null, false);
+    expect(prompt).not.toContain('"description"');
+  });
+
+  test("includes description field when includeDescription is true", () => {
+    const prompt = buildTaskPrompt(body, subject, mailDt, curDt, null, true);
+    expect(prompt).toContain('"description"');
+    expect(prompt).toContain("brief 1-2 sentence summary");
   });
 });
 
