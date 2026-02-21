@@ -30,7 +30,7 @@ Search for **ThunderClerk-AI** and click Install.
 ### From source
 
 ```
-git clone https://github.com/YOUR_USERNAME/thunderbird-thunderclerk-ai
+git clone https://github.com/coffeeOwl1/thunderclerk-ai
 cd thunderbird-thunderclerk-ai
 zip -r thunderclerk-ai.xpi . -x "*.git*" "node_modules/*" "tests/*" "*.md" "package*.json"
 ```

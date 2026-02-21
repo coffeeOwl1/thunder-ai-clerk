@@ -49,13 +49,13 @@ ThunderClerk-AI reads the full body of any selected email, sends it to a [local 
 ollama, ai, calendar, tasks, local-ai, llm
 
 ## Homepage URL
-https://github.com/YOUR_USERNAME/thunderbird-thunderclerk-ai
+https://github.com/coffeeOwl1/thunderclerk-ai
 
 ## Support URL
-https://github.com/YOUR_USERNAME/thunderbird-thunderclerk-ai/issues
+https://github.com/coffeeOwl1/thunderclerk-ai/issues
 
 ## Privacy Policy URL
-(Host PRIVACY.md on GitHub Pages or a static URL after creating the repo)
+https://github.com/coffeeOwl1/thunderclerk-ai/blob/main/PRIVACY.md
 
 ## License
 GPL v3

@@ -4,10 +4,11 @@
   "version": "1.0.0",
   "description": "Add emails to Thunderbird calendar or tasks via a local Ollama instance — no text selection required.",
   "author": "Ryan",
+  "homepage_url": "https://github.com/coffeeOwl1/thunderclerk-ai",
 
   "browser_specific_settings": {
     "gecko": {
-      "id": "thunderclerk-ai@local",
+      "id": "thunderclerk-ai@coffeeOwl1",
       "strict_min_version": "128.0"
     }
   },
