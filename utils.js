@@ -124,19 +124,23 @@ function addHoursToCalDate(dateStr, hours) {
 // date normalization. All rules are skipped for all-day events.
 //
 //  - Start time missing (T000000): default to 9:00 AM
-//  - End date/time missing or empty: default to start + 1 hour
-//  - End time missing (T000000): default to start + 1 hour
+//  - End date/time missing, empty, or timeless (T000000): start + 1 hour
+//  - Start was date-only: end is always overridden to start + 1 hour,
+//    because if the email had no time the AI's end-time guess is unreliable
 function applyCalendarDefaults(data) {
   if (data.forceAllDay) return data;
   if (!data.startDate)  return data;
 
+  const startWasDateOnly = data.startDate.endsWith("T000000");
+
   // Default missing start time to 9am
-  if (data.startDate.endsWith("T000000")) {
+  if (startWasDateOnly) {
     data.startDate = data.startDate.slice(0, 9) + "090000";
   }
 
-  // Default missing or timeless end to start + 1 hour
-  if (!data.endDate || data.endDate.endsWith("T000000")) {
+  // If the email had no time at all, or end is missing/timeless, default
+  // end to start + 1 hour (ignore any AI-guessed end-of-day value).
+  if (startWasDateOnly || !data.endDate || data.endDate.endsWith("T000000")) {
     data.endDate = addHoursToCalDate(data.startDate, 1);
   }
 

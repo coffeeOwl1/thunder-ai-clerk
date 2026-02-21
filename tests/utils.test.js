@@ -101,6 +101,14 @@ describe("applyCalendarDefaults", () => {
     expect(data.endDate).toBe("20260225T100000");
   });
 
+  test("overrides AI end-of-day guess (23:59) when start was date-only", () => {
+    // AI returned T235900 as a guess — should be ignored when email had no time
+    const data = { startDate: "20260225T000000", endDate: "20260225T235900" };
+    applyCalendarDefaults(data);
+    expect(data.startDate).toBe("20260225T090000");
+    expect(data.endDate).toBe("20260225T100000");
+  });
+
   test("does not modify times that are already set", () => {
     const data = { startDate: "20260225T140000", endDate: "20260225T153000" };
     applyCalendarDefaults(data);
