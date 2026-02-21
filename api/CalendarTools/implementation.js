@@ -1,5 +1,5 @@
 /*
- * Thunder AI Clerk - Thunderbird Extension
+ * ThunderClerk-AI - Thunderbird Extension
  * CalendarTools Experiment API
  *
  * Adapted from ThunderAI Sparks (https://micz.it/thunderbird-addon-thunderai/#sparks)
@@ -50,14 +50,14 @@
   try {
     ({ CalEvent } = ChromeUtils.importESModule("resource:///modules/CalEvent.sys.mjs"));
   } catch (e) {
-    console.warn("[ThunderAIClerk] CalEvent import failed:", e.message);
+    console.warn("[ThunderClerk-AI] CalEvent import failed:", e.message);
   }
 
   var CalTodo = null;
   try {
     ({ CalTodo } = ChromeUtils.importESModule("resource:///modules/CalTodo.sys.mjs"));
   } catch (e) {
-    console.warn("[ThunderAIClerk] CalTodo import failed:", e.message);
+    console.warn("[ThunderClerk-AI] CalTodo import failed:", e.message);
   }
 
   // createTodoWithDialog may live on the window (older TB) or in the module (TB 128+).
@@ -70,11 +70,11 @@
         "resource:///modules/calendar/calendar-item-editing.sys.mjs"
       );
       if (typeof mod.createTodoWithDialog === "function") {
-        console.log("[ThunderAIClerk] Using createTodoWithDialog from calendar-item-editing module");
+        console.log("[ThunderClerk-AI] Using createTodoWithDialog from calendar-item-editing module");
         return mod.createTodoWithDialog;
       }
     } catch (e) {
-      console.warn("[ThunderAIClerk] calendar-item-editing module not found:", e.message);
+      console.warn("[ThunderClerk-AI] calendar-item-editing module not found:", e.message);
     }
     return null;
   }
@@ -90,13 +90,13 @@
         item.setCategories([category]);
         return;
       } catch (e) {
-        console.warn("[ThunderAIClerk] setCategories([]) failed:", e.message);
+        console.warn("[ThunderClerk-AI] setCategories([]) failed:", e.message);
       }
     }
     try {
       item.setProperty("CATEGORIES", category);
     } catch (e) {
-      console.warn("[ThunderAIClerk] Could not set category:", e.message);
+      console.warn("[ThunderClerk-AI] Could not set category:", e.message);
     }
   }
 
@@ -106,7 +106,7 @@
       const calendars = cal.manager.getCalendars();
       return calendars.find(c => c.name === name && !c.getProperty("disabled")) || null;
     } catch (e) {
-      console.warn("[ThunderAIClerk] findCalendarByName error:", e.message);
+      console.warn("[ThunderClerk-AI] findCalendarByName error:", e.message);
       return null;
     }
   }
@@ -158,7 +158,7 @@
                     calEvent.addAttendee(attendee);
                   }
                 } catch (e) {
-                  console.warn("[ThunderAIClerk] Could not set up CalEvent:", e.message);
+                  console.warn("[ThunderClerk-AI] Could not set up CalEvent:", e.message);
                   calEvent = null;
                 }
               }
@@ -175,7 +175,7 @@
                 calEvent ? [] : attendees_obj
               );
             } catch (e) {
-              console.error("[ThunderAIClerk] openCalendarDialog error:", e);
+              console.error("[ThunderClerk-AI] openCalendarDialog error:", e);
               return { result: false, error: e.message };
             }
             return { result: true };
@@ -210,7 +210,7 @@
                   calTodo.setProperty("DESCRIPTION", task_data.description);
                   setItemCategory(calTodo, task_data.category);
                 } catch (e) {
-                  console.warn("[ThunderAIClerk] Could not set up CalTodo:", e.message);
+                  console.warn("[ThunderClerk-AI] Could not set up CalTodo:", e.message);
                   calTodo = null;
                 }
               }
@@ -220,7 +220,7 @@
                 throw new Error("createTodoWithDialog not available in this Thunderbird version");
               }
 
-              console.log("[ThunderAIClerk] calling createTodoWithDialog", {
+              console.log("[ThunderClerk-AI] calling createTodoWithDialog", {
                 calendar: curr_calendar?.name,
                 dueDate: dueDate?.icalString,
                 summary: task_data.summary,
@@ -231,7 +231,7 @@
               createTodo(curr_calendar, dueDate, task_data.summary, calTodo, initialDate);
 
             } catch (e) {
-              console.error("[ThunderAIClerk] openTaskDialog error:", e);
+              console.error("[ThunderClerk-AI] openTaskDialog error:", e);
               return { result: false, error: e.message };
             }
             return { result: true };
@@ -243,7 +243,7 @@
               if (!pref) return [];
               return pref.split(",").map(s => s.trim()).filter(Boolean).sort();
             } catch (e) {
-              console.error("[ThunderAIClerk] getCategories error:", e);
+              console.error("[ThunderClerk-AI] getCategories error:", e);
               return [];
             }
           },
@@ -255,7 +255,7 @@
                 .filter(c => !c.getProperty("disabled"))
                 .map(c => ({ name: c.name, id: c.id }));
             } catch (e) {
-              console.error("[ThunderAIClerk] getCalendars error:", e);
+              console.error("[ThunderClerk-AI] getCalendars error:", e);
               return [];
             }
           }

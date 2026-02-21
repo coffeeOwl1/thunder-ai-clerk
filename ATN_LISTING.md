@@ -1,7 +1,7 @@
 # ATN Store Listing Text
 
 ## Extension Name
-Thunder AI Clerk
+ThunderClerk-AI
 
 ## Summary (up to 250 characters)
 Add emails to your Thunderbird calendar or task list in one click using a local Ollama AI model. No cloud service, no API key, no text selection — just right-click and go.
@@ -10,7 +10,7 @@ Add emails to your Thunderbird calendar or task list in one click using a local 
 
 **Turn emails into calendar events and tasks with a single right-click — using AI that runs entirely on your own machine.**
 
-Thunder AI Clerk reads the full body of any selected email, sends it to a [local Ollama instance](https://ollama.com) of your choosing, and opens Thunderbird's native New Event or New Task dialog pre-filled with the AI-extracted details:
+ThunderClerk-AI reads the full body of any selected email, sends it to a [local Ollama instance](https://ollama.com) of your choosing, and opens Thunderbird's native New Event or New Task dialog pre-filled with the AI-extracted details:
 
 - Event or task title
 - Start and end date/time (handles relative references like "next Tuesday")
@@ -19,7 +19,7 @@ Thunder AI Clerk reads the full body of any selected email, sends it to a [local
 - Description (email body, optionally with From + Subject header)
 - Category (optionally chosen by the AI from your Thunderbird category list)
 
-**No text selection required.** Unlike some other AI extensions, Thunder AI Clerk always reads the entire email body automatically.
+**No text selection required.** Unlike some other AI extensions, ThunderClerk-AI always reads the entire email body automatically.
 
 **Your data stays local.** By default the extension talks to `http://127.0.0.1:11434` — Ollama running on your own machine. No email content is ever sent to the extension developer or any third party. You can point it at a remote Ollama host if you choose, but that's entirely under your control.
 
@@ -49,10 +49,10 @@ Thunder AI Clerk reads the full body of any selected email, sends it to a [local
 ollama, ai, calendar, tasks, local-ai, llm
 
 ## Homepage URL
-https://github.com/YOUR_USERNAME/thunderbird-thunder-ai-clerk
+https://github.com/YOUR_USERNAME/thunderbird-thunderclerk-ai
 
 ## Support URL
-https://github.com/YOUR_USERNAME/thunderbird-thunder-ai-clerk/issues
+https://github.com/YOUR_USERNAME/thunderbird-thunderclerk-ai/issues
 
 ## Privacy Policy URL
 (Host PRIVACY.md on GitHub Pages or a static URL after creating the repo)

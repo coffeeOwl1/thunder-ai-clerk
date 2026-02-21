@@ -34,13 +34,13 @@ browser.runtime.onInstalled.addListener(async (details) => {
 // --- Context menu setup ---
 
 browser.menus.create({
-  id: "ollama-add-calendar",
+  id: "thunderclerk-ai-add-calendar",
   title: "Add to Calendar",
   contexts: ["message_list"],
 });
 
 browser.menus.create({
-  id: "ollama-add-task",
+  id: "thunderclerk-ai-add-task",
   title: "Add as Task",
   contexts: ["message_list"],
 });
@@ -122,7 +122,7 @@ async function callOllama(host, model, prompt) {
     throw new Error(`Invalid Ollama host URL: "${host}". Check the extension settings.`);
   }
   const url = host.replace(/\/$/, "") + "/api/generate";
-  if (DEBUG) console.log("[ThunderAIClerk] Calling Ollama", { url, model, promptLen: prompt.length });
+  if (DEBUG) console.log("[ThunderClerk-AI] Calling Ollama", { url, model, promptLen: prompt.length });
 
   const controller = new AbortController();
   const timeoutId  = setTimeout(() => controller.abort(), 60_000);
@@ -147,15 +147,15 @@ async function callOllama(host, model, prompt) {
     throw new Error(`HTTP ${response.status}: ${body}`);
   }
   const data = await response.json();
-  if (DEBUG) console.log("[ThunderAIClerk] Ollama response length:", data.response?.length);
+  if (DEBUG) console.log("[ThunderClerk-AI] Ollama response length:", data.response?.length);
   return data.response;
 }
 
 function notifyError(title, message) {
-  console.error("[ThunderAIClerk]", title, message);
+  console.error("[ThunderClerk-AI]", title, message);
   browser.notifications.create({
     type: "basic",
-    title: `Thunder AI Clerk — ${title}`,
+    title: `ThunderClerk-AI — ${title}`,
     message,
   }).catch(() => {});
 }
@@ -163,11 +163,11 @@ function notifyError(title, message) {
 // --- Menu click handler ---
 
 browser.menus.onClicked.addListener(async (info, tab) => {
-  if (info.menuItemId !== "ollama-add-calendar" && info.menuItemId !== "ollama-add-task") {
+  if (info.menuItemId !== "thunderclerk-ai-add-calendar" && info.menuItemId !== "thunderclerk-ai-add-task") {
     return;
   }
 
-  const isCalendar = info.menuItemId === "ollama-add-calendar";
+  const isCalendar = info.menuItemId === "thunderclerk-ai-add-calendar";
 
   const messages = info.selectedMessages && info.selectedMessages.messages;
   if (!messages || messages.length === 0) {
@@ -217,7 +217,7 @@ browser.menus.onClicked.addListener(async (info, tab) => {
     try {
       categories = await browser.CalendarTools.getCategories();
     } catch (e) {
-      console.warn("[ThunderAIClerk] Could not fetch categories, proceeding without:", e.message);
+      console.warn("[ThunderClerk-AI] Could not fetch categories, proceeding without:", e.message);
     }
   }
 
@@ -227,10 +227,10 @@ browser.menus.onClicked.addListener(async (info, tab) => {
     : buildTaskPrompt(emailBody, subject, mailDatetime, currentDt, categories);
 
   // Call Ollama — show a progress notification while we wait
-  const THINKING_ID = "thunder-ai-clerk-thinking";
+  const THINKING_ID = "thunderclerk-ai-thinking";
   browser.notifications.create(THINKING_ID, {
     type: "basic",
-    title: "Thunder AI Clerk",
+    title: "ThunderClerk-AI",
     message: `Asking ${model} to extract ${isCalendar ? "event" : "task"} details…`,
   }).catch(() => {});
 
@@ -250,7 +250,7 @@ browser.menus.onClicked.addListener(async (info, tab) => {
     const jsonStr = extractJSON(rawResponse);
     parsed = JSON.parse(jsonStr);
   } catch (e) {
-    console.error("[ThunderAIClerk] JSON parse failed:", e.message, "\nRaw response:", rawResponse);
+    console.error("[ThunderClerk-AI] JSON parse failed:", e.message, "\nRaw response:", rawResponse);
     notifyError("Parse error", "Model returned invalid JSON. Check the browser console for details.");
     return;
   }

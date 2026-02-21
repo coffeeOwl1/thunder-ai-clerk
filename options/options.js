@@ -27,7 +27,7 @@ async function populateModels(selectEl, savedModel) {
     const data = await resp.json();
     models = (data.models || []).map(m => m.name).sort();
   } catch (e) {
-    console.error("[ThunderAIClerk] Could not fetch models:", e);
+    console.error("[ThunderClerk-AI] Could not fetch models:", e);
     // Show saved model so the user isn't left with an empty select
     if (savedModel) {
       const opt = document.createElement("option");
@@ -85,7 +85,7 @@ async function populateCalendars(selectEl, savedName) {
   try {
     calendars = await browser.CalendarTools.getCalendars();
   } catch (e) {
-    console.error("[ThunderAIClerk] getCalendars failed:", e);
+    console.error("[ThunderClerk-AI] getCalendars failed:", e);
     const opt = document.createElement("option");
     opt.value = "";
     opt.textContent = "(could not read calendars — is the extension fully loaded?)";

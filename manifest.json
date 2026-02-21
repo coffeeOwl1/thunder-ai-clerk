@@ -1,13 +1,13 @@
 {
   "manifest_version": 2,
-  "name": "Thunder AI Clerk",
+  "name": "ThunderClerk-AI",
   "version": "1.0.0",
   "description": "Add emails to Thunderbird calendar or tasks via a local Ollama instance — no text selection required.",
   "author": "Ryan",
 
   "browser_specific_settings": {
     "gecko": {
-      "id": "thunder-ai-clerk@local",
+      "id": "thunderclerk-ai@local",
       "strict_min_version": "128.0"
     }
   },

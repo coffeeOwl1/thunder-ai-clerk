@@ -1,4 +1,4 @@
-# Thunder AI Clerk — Thunderbird Extension
+# ThunderClerk-AI — Thunderbird Extension
 
 Add emails to your Thunderbird calendar or task list with a single right-click, using a **local Ollama model** to extract the event or task details.
 
@@ -25,21 +25,21 @@ No cloud accounts, no API keys, no text selection required — just Thunderbird 
 
 ### From ATN (addons.thunderbird.net)
 
-Search for **Thunder AI Clerk** and click Install.
+Search for **ThunderClerk-AI** and click Install.
 
 ### From source
 
 ```
-git clone https://github.com/YOUR_USERNAME/thunderbird-thunder-ai-clerk
-cd thunderbird-thunder-ai-clerk
-zip -r thunder-ai-clerk.xpi . -x "*.git*" "node_modules/*" "tests/*" "*.md" "package*.json"
+git clone https://github.com/YOUR_USERNAME/thunderbird-thunderclerk-ai
+cd thunderbird-thunderclerk-ai
+zip -r thunderclerk-ai.xpi . -x "*.git*" "node_modules/*" "tests/*" "*.md" "package*.json"
 ```
 
-In Thunderbird: **Add-ons Manager → gear icon → Install Add-on From File** → select `thunder-ai-clerk.xpi`.
+In Thunderbird: **Add-ons Manager → gear icon → Install Add-on From File** → select `thunderclerk-ai.xpi`.
 
 ## Configuration
 
-After installation the Settings page opens automatically. You can also reach it via **Add-ons Manager → Thunder AI Clerk → Preferences**.
+After installation the Settings page opens automatically. You can also reach it via **Add-ons Manager → ThunderClerk-AI → Preferences**.
 
 | Setting | Default | Description |
 |---|---|---|

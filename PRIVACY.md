@@ -1,10 +1,10 @@
-# Privacy Policy — Thunder AI Clerk
+# Privacy Policy — ThunderClerk-AI
 
 **Last updated: 2025**
 
 ## Summary
 
-Thunder AI Clerk sends email content to a local AI service that you configure and control. It does not collect, store, or transmit any data to the extension developer or any third party.
+ThunderClerk-AI sends email content to a local AI service that you configure and control. It does not collect, store, or transmit any data to the extension developer or any third party.
 
 ## What data is processed
 
