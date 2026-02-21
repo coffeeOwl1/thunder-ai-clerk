@@ -1,0 +1,49 @@
+{
+  "manifest_version": 2,
+  "name": "Thunder AI Clerk",
+  "version": "1.0.0",
+  "description": "Add emails to Thunderbird calendar or tasks via a local Ollama instance — no text selection required.",
+  "author": "Ryan",
+
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "thunder-ai-clerk@local",
+      "strict_min_version": "128.0"
+    }
+  },
+
+  "content_security_policy": "script-src 'self'; object-src 'none'; connect-src *",
+
+  "permissions": [
+    "menus",
+    "messagesRead",
+    "storage",
+    "messageDisplay",
+    "notifications"
+  ],
+
+  "icons": {
+    "48": "icons/icon-48.png",
+    "96": "icons/icon-96.png"
+  },
+
+  "experiment_apis": {
+    "CalendarTools": {
+      "schema": "api/CalendarTools/schema.json",
+      "parent": {
+        "scopes": ["addon_parent"],
+        "paths": [["CalendarTools"]],
+        "script": "api/CalendarTools/implementation.js"
+      }
+    }
+  },
+
+  "background": {
+    "scripts": ["utils.js", "background.js"]
+  },
+
+  "options_ui": {
+    "page": "options/options.html",
+    "open_in_tab": false
+  }
+}

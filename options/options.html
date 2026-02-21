@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Thunder AI Clerk — Settings</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      font-size: 14px;
+      padding: 16px 20px;
+      max-width: 560px;
+    }
+    h2 { margin-top: 0; font-size: 16px; }
+    h3 { font-size: 13px; font-weight: 700; margin: 22px 0 6px; color: #333;
+         border-bottom: 1px solid #e0e0e0; padding-bottom: 4px; }
+    label {
+      display: block;
+      margin-top: 12px;
+      margin-bottom: 3px;
+      font-weight: 600;
+      font-size: 13px;
+    }
+    input[type="text"], input[type="url"], select {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 5px 8px;
+      font-size: 13px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    .row { display: flex; gap: 8px; align-items: center; }
+    .row select { flex: 1; }
+    .row button { white-space: nowrap; padding: 5px 10px; font-size: 12px; cursor: pointer; }
+    .hint { font-size: 11px; color: #666; margin-top: 3px; }
+    #static-email-wrap { margin-top: 8px; }
+    .checkbox-row { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+    .checkbox-row input { width: auto; margin: 0; }
+    .checkbox-row label { margin: 0; font-weight: 600; font-size: 13px; }
+
+    .save-row {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 20px;
+    }
+    #save-btn {
+      padding: 6px 0;
+      font-size: 13px;
+      cursor: pointer;
+      width: 80px;
+      text-align: center;
+    }
+    #status { margin-top: 8px; font-size: 12px; color: green; min-height: 16px; text-align: right; }
+  </style>
+</head>
+<body>
+  <div id="first-run-notice" style="display:none; background:#fffbe6; border:1px solid #f5c518; border-radius:6px; padding:10px 14px; margin-bottom:16px; font-size:13px;">
+    <strong>Welcome to Thunder AI Clerk!</strong><br>
+    This extension sends the plain-text content of selected emails to the Ollama
+    instance you configure below. By default this is a local server running on
+    your own machine (<code>127.0.0.1</code>). No data is sent to the extension
+    developer or any third party.
+    <a href="#" id="first-run-dismiss" style="display:block; margin-top:6px; color:#555;">Dismiss</a>
+  </div>
+
+  <h2>Thunder AI Clerk Settings</h2>
+
+  <!-- Connection -->
+  <h3>Connection</h3>
+
+  <label for="ollamaHost">Ollama Host URL</label>
+  <input type="url" id="ollamaHost" placeholder="http://127.0.0.1:11434" />
+  <div class="hint">Default: http://127.0.0.1:11434</div>
+
+  <label for="ollamaModel">Model</label>
+  <div class="row">
+    <select id="ollamaModel">
+      <option value="">— click Refresh to load models —</option>
+    </select>
+    <button id="refresh-models">Refresh</button>
+  </div>
+  <div class="hint">Models currently downloaded in Ollama. Hit Refresh after changing the host.</div>
+
+  <!-- Calendar event defaults -->
+  <h3>Calendar Events</h3>
+
+  <label for="defaultCalendar">Default Calendar</label>
+  <div class="row">
+    <select id="defaultCalendar">
+      <option value="">Use currently selected calendar</option>
+    </select>
+    <button id="refresh-calendars">Refresh</button>
+  </div>
+  <div class="hint">Which calendar to create events in.</div>
+
+  <label for="attendeesSource">Attendees</label>
+  <select id="attendeesSource">
+    <option value="from_to">From + To (default)</option>
+    <option value="from">Sender only</option>
+    <option value="to">Recipients only</option>
+    <option value="static">Static email address</option>
+    <option value="none">None</option>
+  </select>
+  <div id="static-email-wrap" style="display:none">
+    <input type="text" id="attendeesStatic" placeholder="you@example.com" />
+    <div class="hint">This address will always be used as the sole attendee.</div>
+  </div>
+  <div class="hint">Which email addresses to suggest to the AI as attendees.</div>
+
+  <label for="descriptionFormat">Event Description</label>
+  <select id="descriptionFormat">
+    <option value="body_from_subject">Email body + From + Subject (default)</option>
+    <option value="body">Email body only</option>
+    <option value="none">None (leave blank)</option>
+  </select>
+  <div class="hint">What to pre-fill in the Description field of the calendar event.</div>
+
+  <div class="checkbox-row">
+    <input type="checkbox" id="calendarUseCategory" />
+    <label for="calendarUseCategory">Auto-select category using AI</label>
+  </div>
+  <div class="hint">Ask the AI to pick the best matching category from your Thunderbird calendar categories.</div>
+
+  <!-- Task defaults -->
+  <h3>Tasks</h3>
+
+  <label for="taskDescriptionFormat">Task Description</label>
+  <select id="taskDescriptionFormat">
+    <option value="body_from_subject">Email body + From + Subject (default)</option>
+    <option value="body">Email body only</option>
+    <option value="none">None (leave blank)</option>
+  </select>
+  <div class="hint">What to pre-fill in the Description field of the task.</div>
+
+  <label for="taskDefaultDue">Default Due Date (if none found)</label>
+  <select id="taskDefaultDue">
+    <option value="none">None (leave blank)</option>
+    <option value="7">1 week from now</option>
+    <option value="14">2 weeks from now</option>
+    <option value="30">1 month from now</option>
+  </select>
+  <div class="hint">Fallback due date when the email doesn't mention a deadline.</div>
+
+  <div class="checkbox-row">
+    <input type="checkbox" id="taskUseCategory" />
+    <label for="taskUseCategory">Auto-select category using AI</label>
+  </div>
+  <div class="hint">Ask the AI to pick the best matching category from your Thunderbird calendar categories.</div>
+
+  <div class="save-row">
+    <button id="save-btn">Save</button>
+  </div>
+  <div id="status"></div>
+
+  <script src="options.js"></script>
+</body>
+</html>

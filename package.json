@@ -1,0 +1,14 @@
+{
+  "name": "thunderbird-thunder-ai-clerk",
+  "version": "1.0.0",
+  "description": "Add emails to Thunderbird calendar or tasks via a local Ollama instance.",
+  "scripts": {
+    "test": "jest"
+  },
+  "author": "Ryan",
+  "license": "GPL-3.0-or-later",
+  "type": "commonjs",
+  "devDependencies": {
+    "jest": "^30.2.0"
+  }
+}

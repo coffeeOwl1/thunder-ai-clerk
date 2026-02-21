@@ -1,0 +1,302 @@
+"use strict";
+
+const DEBUG = false;
+
+const DEFAULT_HOST = "http://127.0.0.1:11434";
+
+const DEFAULTS = {
+  ollamaHost:              DEFAULT_HOST,
+  ollamaModel:             "mistral:7b",
+  // Calendar event settings
+  attendeesSource:         "from_to",          // "from_to" | "from" | "to" | "static" | "none"
+  attendeesStatic:         "",
+  defaultCalendar:         "",                 // "" = use currently selected
+  descriptionFormat:       "body_from_subject", // "body_from_subject" | "body" | "none"
+  // Task settings
+  taskDescriptionFormat:   "body_from_subject", // "body_from_subject" | "body" | "none"
+  taskDefaultDue:          "none",             // "none" | "7" | "14" | "30" (days from now)
+  // Category settings
+  calendarUseCategory:     false,
+  taskUseCategory:         false,
+};
+
+// --- First-run onboarding ---
+
+browser.runtime.onInstalled.addListener(async (details) => {
+  if (details.reason === "install") {
+    // Flag so the options page can show the first-run notice
+    await browser.storage.local.set({ firstRun: true });
+    // Open settings so the user can configure Ollama host and model
+    browser.runtime.openOptionsPage();
+  }
+});
+
+// --- Context menu setup ---
+
+browser.menus.create({
+  id: "ollama-add-calendar",
+  title: "Add to Calendar",
+  contexts: ["message_list"],
+});
+
+browser.menus.create({
+  id: "ollama-add-task",
+  title: "Add as Task",
+  contexts: ["message_list"],
+});
+
+// Pure utility functions (normalizeCalDate, extractJSON, buildAttendeesHint,
+// buildDescription, buildCategoryInstruction, isValidHostUrl, etc.) are
+// defined in utils.js, which is loaded before this script.
+
+function normalizeCalendarData(data) {
+  if (data.startDate) data.startDate = normalizeCalDate(data.startDate);
+  if (data.endDate)   data.endDate   = normalizeCalDate(data.endDate);
+  return data;
+}
+
+function normalizeTaskData(data) {
+  if (data.dueDate)     data.dueDate     = normalizeCalDate(data.dueDate);
+  if (data.initialDate) data.initialDate = normalizeCalDate(data.initialDate);
+  if (data.InitialDate) {
+    data.initialDate = normalizeCalDate(data.InitialDate);
+    delete data.InitialDate;
+  }
+  return data;
+}
+
+function buildCalendarPrompt(emailBody, subject, mailDatetime, currentDt, attendeeHints, categories) {
+  const attendeeLine = attendeeHints.length > 0
+    ? `These are the attendees: ${attendeeHints.join(", ")}.`
+    : "";
+  const { instruction: categoryInstruction, jsonLine: categoryJsonLine } = buildCategoryInstruction(categories);
+
+  return `Extract all relevant details required to generate a calendar event from the following email. The extracted information should include:
+- Event Title
+- Start Date and Time (including timezone, if specified)
+- End Date and Time (including timezone, if specified)
+- Full day (if mentioned)
+- Attendees
+Ensure the data is formatted clearly and consistently so that it can be directly used for creating a calendar event.
+If there are relative time references, consider that the date and time of the email are "${mailDatetime}". Calculate the start date and time based on this reference. If the calculated start date and time are earlier than "${currentDt}", recalculate the start date and time using "${currentDt}" as the base.
+If the duration is not specified, set it to one hour.
+${attendeeLine}
+If you're not able to get one or more of the required information, please respond with an empty string for that field.
+${categoryInstruction}
+Generate a response in JSON format only. Do not include any additional text or explanations; provide only the JSON. Here is the format to be used:
+{
+"startDate": "YYYYMMDDTHHMMSS",
+"endDate": "YYYYMMDDTHHMMSS",
+"summary": "Calendar event summary here",
+"forceAllDay": false,
+"attendees": ["attendee1@example.com", "attendee2@example.com"]${categoryJsonLine}
+}
+Subject: "${subject}"
+Email body: "${emailBody}"`;
+}
+
+function buildTaskPrompt(emailBody, subject, mailDatetime, currentDt, categories) {
+  const { instruction: categoryInstruction, jsonLine: categoryJsonLine } = buildCategoryInstruction(categories);
+
+  return `Extract all relevant details required to generate a task from the following email. The extracted information should include:
+- Due Date and Time (including timezone, if specified)
+- Task summary
+- Initial Date and Time (including timezone, if specified)
+Ensure the data is formatted clearly and consistently so that it can be directly used for creating a task.
+If there are relative time references, consider that the date and time of the email are "${mailDatetime}". Calculate the start date and time based on this reference. If the calculated start date and time are earlier than "${currentDt}", recalculate the start date and time using "${currentDt}" as the base.
+If you're not able to get one or more of the required information, please respond with an empty string for that field.
+${categoryInstruction}
+Generate a response in JSON format only. Do not include any additional text or explanations; provide only the JSON. Here is the format to be used:
+{
+"initialDate": "YYYYMMDDTHHMMSS",
+"dueDate": "YYYYMMDDTHHMMSS",
+"summary": "Task summary here"${categoryJsonLine}
+}
+If there are no information about the dates, omit those fields.
+Subject: "${subject}"
+Email body: "${emailBody}"`;
+}
+
+async function callOllama(host, model, prompt) {
+  if (!isValidHostUrl(host)) {
+    throw new Error(`Invalid Ollama host URL: "${host}". Check the extension settings.`);
+  }
+  const url = host.replace(/\/$/, "") + "/api/generate";
+  if (DEBUG) console.log("[ThunderAIClerk] Calling Ollama", { url, model, promptLen: prompt.length });
+
+  const controller = new AbortController();
+  const timeoutId  = setTimeout(() => controller.abort(), 60_000);
+
+  let response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model, prompt, stream: false }),
+      signal: controller.signal,
+    });
+  } catch (e) {
+    clearTimeout(timeoutId);
+    if (e.name === "AbortError") throw new Error("Ollama request timed out after 60 seconds.");
+    throw e;
+  }
+  clearTimeout(timeoutId);
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`HTTP ${response.status}: ${body}`);
+  }
+  const data = await response.json();
+  if (DEBUG) console.log("[ThunderAIClerk] Ollama response length:", data.response?.length);
+  return data.response;
+}
+
+function notifyError(title, message) {
+  console.error("[ThunderAIClerk]", title, message);
+  browser.notifications.create({
+    type: "basic",
+    title: `Thunder AI Clerk — ${title}`,
+    message,
+  }).catch(() => {});
+}
+
+// --- Menu click handler ---
+
+browser.menus.onClicked.addListener(async (info, tab) => {
+  if (info.menuItemId !== "ollama-add-calendar" && info.menuItemId !== "ollama-add-task") {
+    return;
+  }
+
+  const isCalendar = info.menuItemId === "ollama-add-calendar";
+
+  const messages = info.selectedMessages && info.selectedMessages.messages;
+  if (!messages || messages.length === 0) {
+    notifyError("No message selected", "Please select a message first.");
+    return;
+  }
+  const message = messages[0];
+
+  // Load settings
+  const settings = await browser.storage.sync.get(DEFAULTS);
+  const host                  = settings.ollamaHost            || DEFAULT_HOST;
+  const model                 = settings.ollamaModel           || DEFAULTS.ollamaModel;
+  const attendeesSource       = settings.attendeesSource       || "from_to";
+  const attendeesStatic       = settings.attendeesStatic       || "";
+  const defaultCalendar       = settings.defaultCalendar       || "";
+  const descriptionFormat     = settings.descriptionFormat     || "body_from_subject";
+  const taskDescriptionFormat = settings.taskDescriptionFormat || "body_from_subject";
+  const taskDefaultDue        = settings.taskDefaultDue        || "none";
+  const calendarUseCategory   = !!settings.calendarUseCategory;
+  const taskUseCategory       = !!settings.taskUseCategory;
+
+  // Get full message body
+  let emailBody = "";
+  try {
+    const full = await browser.messages.getFull(message.id);
+    emailBody = extractTextBody(full);
+    if (!emailBody) {
+      notifyError("Empty body", "Could not extract plain text from this message.");
+      return;
+    }
+  } catch (e) {
+    notifyError("Message read error", e.message);
+    return;
+  }
+
+  // Build context values
+  const mailDatetime  = formatDatetime(message.date);
+  const currentDt     = currentDatetime();
+  const author        = message.author || "";
+  const subject       = message.subject || "";
+  const attendeeHints = buildAttendeesHint(message, attendeesSource, attendeesStatic);
+
+  // Fetch categories if the user opted in for this action type
+  let categories = null;
+  const wantCategories = isCalendar ? calendarUseCategory : taskUseCategory;
+  if (wantCategories) {
+    try {
+      categories = await browser.CalendarTools.getCategories();
+    } catch (e) {
+      console.warn("[ThunderAIClerk] Could not fetch categories, proceeding without:", e.message);
+    }
+  }
+
+  // Build prompt
+  const prompt = isCalendar
+    ? buildCalendarPrompt(emailBody, subject, mailDatetime, currentDt, attendeeHints, categories)
+    : buildTaskPrompt(emailBody, subject, mailDatetime, currentDt, categories);
+
+  // Call Ollama — show a progress notification while we wait
+  const THINKING_ID = "thunder-ai-clerk-thinking";
+  browser.notifications.create(THINKING_ID, {
+    type: "basic",
+    title: "Thunder AI Clerk",
+    message: `Asking ${model} to extract ${isCalendar ? "event" : "task"} details…`,
+  }).catch(() => {});
+
+  let rawResponse;
+  try {
+    rawResponse = await callOllama(host, model, prompt);
+  } catch (e) {
+    browser.notifications.clear(THINKING_ID).catch(() => {});
+    notifyError("Ollama error", e.message);
+    return;
+  }
+  browser.notifications.clear(THINKING_ID).catch(() => {});
+
+  // Parse JSON
+  let parsed;
+  try {
+    const jsonStr = extractJSON(rawResponse);
+    parsed = JSON.parse(jsonStr);
+  } catch (e) {
+    console.error("[ThunderAIClerk] JSON parse failed:", e.message, "\nRaw response:", rawResponse);
+    notifyError("Parse error", "Model returned invalid JSON. Check the browser console for details.");
+    return;
+  }
+
+  // Open dialog
+  if (isCalendar) {
+    normalizeCalendarData(parsed);
+
+    // Inject description (built from email metadata, not AI-extracted)
+    const description = buildDescription(emailBody, author, subject, descriptionFormat);
+    if (description) parsed.description = description;
+
+    // Inject calendar preference
+    if (defaultCalendar) parsed.calendar_name = defaultCalendar;
+
+    // For "static" or "none" attendees, override whatever the AI returned
+    if (attendeesSource === "static") {
+      parsed.attendees = attendeesStatic ? [attendeesStatic] : [];
+    } else if (attendeesSource === "none") {
+      parsed.attendees = [];
+    }
+  } else {
+    normalizeTaskData(parsed);
+
+    // Apply default due date if the model didn't find one and user configured a fallback
+    if (!parsed.dueDate && taskDefaultDue !== "none") {
+      const future = new Date();
+      future.setDate(future.getDate() + parseInt(taskDefaultDue, 10));
+      const y  = future.getFullYear();
+      const mo = String(future.getMonth() + 1).padStart(2, "0");
+      const d  = String(future.getDate()).padStart(2, "0");
+      parsed.dueDate = `${y}${mo}${d}T120000`;
+    }
+
+    // Description for tasks
+    const taskDescription = buildDescription(emailBody, author, subject, taskDescriptionFormat);
+    if (taskDescription) parsed.description = taskDescription;
+  }
+
+  try {
+    if (isCalendar) {
+      await browser.CalendarTools.openCalendarDialog(parsed);
+    } else {
+      await browser.CalendarTools.openTaskDialog(parsed);
+    }
+  } catch (e) {
+    notifyError("Dialog error", e.message);
+  }
+});
