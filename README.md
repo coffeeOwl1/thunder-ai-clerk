@@ -47,8 +47,8 @@ After installation the Settings page opens automatically. You can also reach it 
 | Model | `mistral:7b` | Which model to use (dropdown populated from Ollama) |
 | Default Calendar | (currently selected) | Which calendar to create events in |
 | Attendees | From + To | Which addresses to suggest to the AI |
-| Event Description | Body + From + Subject | What to pre-fill in the event Description field |
-| Task Description | Body + From + Subject | What to pre-fill in the task Description field |
+| Event Description | Body + From + Subject | What to pre-fill in the event Description field (options: Body + From + Subject, Body only, AI-generated summary, None) |
+| Task Description | Body + From + Subject | What to pre-fill in the task Description field (options: Body + From + Subject, Body only, AI-generated summary, None) |
 | Default Due Date | None | Fallback when no deadline is found |
 | Auto-select category | Off | Ask the AI to pick the best category for events/tasks |
 

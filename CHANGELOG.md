@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- "AI-generated summary" description format option for events and tasks — the AI produces a concise 1-2 sentence summary instead of pasting the raw email body
+
 ## [1.0.0] — 2025
 
 ### Added
