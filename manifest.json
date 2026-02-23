@@ -21,7 +21,8 @@
     "messagesRead",
     "storage",
     "messageDisplay",
-    "notifications"
+    "notifications",
+    "<all_urls>"
   ],
 
   "icons": {
