@@ -84,7 +84,7 @@ browser.menus.create({
 browser.menus.create({
   id: "thunderclerk-ai-summarize-forward",
   parentId: "thunderclerk-ai-parent",
-  title: "Summarize & Forward",
+  title: "Summarize && Forward",
   contexts: ["message_list"],
 });
 
