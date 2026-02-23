@@ -10,9 +10,14 @@ No cloud accounts, no API keys, no text selection required — just Thunderbird 
 
 - **Add to Calendar** — right-click any email and open a pre-filled New Event dialog
 - **Add as Task** — right-click any email and open a pre-filled New Task dialog
+- **Draft Reply** — generate a context-aware reply draft
+- **Summarize & Forward** — produce a TL;DR + bullet-point summary for forwarding
+- **Extract Contact** — pull contact info from email signatures into your address book
+- **Catalog Email** — auto-tag emails using AI, with support for existing Thunderbird tags
 - AI extracts title, dates, times, attendees, and (optionally) category
 - Reads the full email body — no need to select text first
 - All processing is done locally via your own Ollama instance
+- Auto-tagging can run in the background after any other action
 - Configurable: model, host, attendees source, default calendar, description format, categories
 
 ## Requirements
@@ -32,7 +37,7 @@ Search for **ThunderClerk-AI** and click Install.
 ```
 git clone https://github.com/coffeeOwl1/thunderclerk-ai
 cd thunderbird-thunderclerk-ai
-zip -r thunderclerk-ai.xpi . -x "*.git*" "node_modules/*" "tests/*" "*.md" "package*.json"
+./build.sh prod
 ```
 
 In Thunderbird: **Add-ons Manager → gear icon → Install Add-on From File** → select `thunderclerk-ai.xpi`.
@@ -51,6 +56,8 @@ After installation the Settings page opens automatically. You can also reach it 
 | Task Description | Body + From + Subject | What to pre-fill in the task Description field (options: Body + From + Subject, Body only, AI-generated summary, None) |
 | Default Due Date | None | Fallback when no deadline is found |
 | Auto-select category | Off | Ask the AI to pick the best category for events/tasks |
+| Auto-tag after actions | On | Automatically tag emails after using other actions |
+| Allow new tags | Off | Let the AI create new tags (experimental — may clutter your tag list) |
 
 ## Privacy
 
@@ -64,7 +71,30 @@ The CalendarTools experiment API is adapted from [ThunderAI Sparks](https://micz
 
 ## Development
 
-```
+```bash
 npm install        # install Jest for tests
-npm test           # run unit tests
+npm test           # unit tests (~136 cases)
+npm run test:integration  # integration tests (needs running Ollama)
 ```
+
+### Building
+
+A build script handles config selection and packaging:
+
+```bash
+./build.sh dev    # uses config.dev.js (personal settings, gitignored)
+./build.sh prod   # uses config.prod.js (production defaults)
+./build.sh        # defaults to prod
+```
+
+The script copies the selected config to `config.js` and zips the extension
+into `thunderclerk-ai.xpi`.
+
+### Dev config setup
+
+```bash
+cp config.dev.js.example config.dev.js
+# edit config.dev.js with your Ollama host, preferred model, etc.
+```
+
+`config.dev.js` is gitignored so your personal settings stay local.

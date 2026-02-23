@@ -1,0 +1,29 @@
+"use strict";
+
+// Copy this file to config.dev.js and adjust to your dev environment.
+// config.dev.js is gitignored — your personal settings stay local.
+
+const DEFAULTS = {
+  ollamaHost:            "http://127.0.0.1:11434",
+  ollamaModel:           "mistral:7b",
+  // Calendar event settings
+  attendeesSource:       "from_to",
+  attendeesStatic:       "",
+  defaultCalendar:       "",
+  descriptionFormat:     "body_from_subject",
+  // Task settings
+  taskDescriptionFormat: "body_from_subject",
+  taskDefaultDue:        "none",
+  // Category settings
+  calendarUseCategory:   false,
+  taskUseCategory:       false,
+  // Compose action settings
+  replyMode:             "replyToSender",
+  // Contact settings
+  contactAddressBook:    "",
+  // Email cataloging settings
+  autoTagAfterAction:    true,
+  allowNewTags:          false,
+  // Debug settings
+  debugPromptPreview:    true,
+};

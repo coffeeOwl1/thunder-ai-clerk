@@ -1,22 +1,6 @@
 "use strict";
 
-const DEFAULTS = {
-  ollamaHost:            "http://127.0.0.1:11434",
-  ollamaModel:           "mistral:7b",
-  attendeesSource:       "from_to",
-  attendeesStatic:       "",
-  defaultCalendar:       "",
-  descriptionFormat:     "body_from_subject",
-  taskDescriptionFormat: "body_from_subject",
-  taskDefaultDue:        "none",
-  calendarUseCategory:   false,
-  taskUseCategory:       false,
-  replyMode:             "replyToSender",
-  contactAddressBook:    "",
-  autoTagAfterAction:    true,
-  allowNewTags:          false,
-  debugPromptPreview:    false,
-};
+// DEFAULTS is defined in config.js, loaded before this script.
 
 // --- Model list from Ollama ---
 

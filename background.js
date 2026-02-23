@@ -4,30 +4,7 @@ const DEBUG = false;
 
 const DEFAULT_HOST = "http://127.0.0.1:11434";
 
-const DEFAULTS = {
-  ollamaHost:              DEFAULT_HOST,
-  ollamaModel:             "mistral:7b",
-  // Calendar event settings
-  attendeesSource:         "from_to",          // "from_to" | "from" | "to" | "static" | "none"
-  attendeesStatic:         "",
-  defaultCalendar:         "",                 // "" = use currently selected
-  descriptionFormat:       "body_from_subject", // "body_from_subject" | "body" | "none" | "ai_summary"
-  // Task settings
-  taskDescriptionFormat:   "body_from_subject", // "body_from_subject" | "body" | "none" | "ai_summary"
-  taskDefaultDue:          "none",             // "none" | "7" | "14" | "30" (days from now)
-  // Category settings
-  calendarUseCategory:     false,
-  taskUseCategory:         false,
-  // Compose action settings
-  replyMode:               "replyToSender",    // "replyToSender" | "replyToAll"
-  // Contact settings
-  contactAddressBook:      "",                 // "" = first writable address book
-  // Email cataloging settings
-  autoTagAfterAction:      true,
-  allowNewTags:            false,
-  // Debug settings
-  debugPromptPreview:      false,
-};
+// DEFAULTS is defined in config.js, loaded before this script.
 
 // --- First-run onboarding ---
 
