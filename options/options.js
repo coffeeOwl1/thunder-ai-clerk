@@ -11,6 +11,8 @@ const DEFAULTS = {
   taskDefaultDue:        "none",
   calendarUseCategory:   false,
   taskUseCategory:       false,
+  replyMode:             "replyToSender",
+  contactAddressBook:    "",
   debugPromptPreview:    false,
 };
 
@@ -108,6 +110,39 @@ async function populateCalendars(selectEl, savedName) {
   }
 }
 
+// --- Address book list ---
+
+async function populateAddressBooks(selectEl, savedId) {
+  while (selectEl.options.length > 1) selectEl.remove(1);
+
+  let books = [];
+  try {
+    books = await browser.addressBooks.list();
+  } catch (e) {
+    console.error("[ThunderClerk-AI] Could not list address books:", e);
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "(could not read address books)";
+    opt.disabled = true;
+    selectEl.appendChild(opt);
+    return;
+  }
+
+  const writable = books.filter(b => !b.readOnly);
+
+  for (const book of writable) {
+    const opt = document.createElement("option");
+    opt.value = book.id;
+    opt.textContent = book.name;
+    selectEl.appendChild(opt);
+  }
+
+  if (savedId) {
+    selectEl.value = savedId;
+    if (selectEl.value !== savedId) selectEl.value = "";
+  }
+}
+
 // --- Attendees source show/hide ---
 
 function syncAttendeesUI(source) {
@@ -128,6 +163,7 @@ async function restoreOptions() {
   document.getElementById("taskDefaultDue").value           = s.taskDefaultDue;
   document.getElementById("calendarUseCategory").checked    = !!s.calendarUseCategory;
   document.getElementById("taskUseCategory").checked        = !!s.taskUseCategory;
+  document.getElementById("replyMode").value                = s.replyMode;
   document.getElementById("debugPromptPreview").checked     = !!s.debugPromptPreview;
 
   syncAttendeesUI(s.attendeesSource);
@@ -136,6 +172,7 @@ async function restoreOptions() {
   await Promise.all([
     populateModels(document.getElementById("ollamaModel"), s.ollamaModel),
     populateCalendars(document.getElementById("defaultCalendar"), s.defaultCalendar),
+    populateAddressBooks(document.getElementById("contactAddressBook"), s.contactAddressBook),
   ]);
 }
 
@@ -178,6 +215,8 @@ async function saveOptions() {
     taskDefaultDue:        document.getElementById("taskDefaultDue").value,
     calendarUseCategory:   document.getElementById("calendarUseCategory").checked,
     taskUseCategory:       document.getElementById("taskUseCategory").checked,
+    replyMode:             document.getElementById("replyMode").value,
+    contactAddressBook:    document.getElementById("contactAddressBook").value,
     debugPromptPreview:    document.getElementById("debugPromptPreview").checked,
   };
 
@@ -218,6 +257,11 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("refresh-calendars").addEventListener("click", async () => {
     const sel = document.getElementById("defaultCalendar");
     await populateCalendars(sel, sel.value);
+  });
+
+  document.getElementById("refresh-addressbooks").addEventListener("click", async () => {
+    const sel = document.getElementById("contactAddressBook");
+    await populateAddressBooks(sel, sel.value);
   });
 
   document.getElementById("save-btn").addEventListener("click", saveOptions);

@@ -18,6 +18,10 @@ const DEFAULTS = {
   // Category settings
   calendarUseCategory:     false,
   taskUseCategory:         false,
+  // Compose action settings
+  replyMode:               "replyToSender",    // "replyToSender" | "replyToAll"
+  // Contact settings
+  contactAddressBook:      "",                 // "" = first writable address book
   // Debug settings
   debugPromptPreview:      false,
 };
@@ -35,15 +39,66 @@ browser.runtime.onInstalled.addListener(async (details) => {
 
 // --- Context menu setup ---
 
+const MENU_IDS = new Set([
+  "thunderclerk-ai-add-calendar",
+  "thunderclerk-ai-add-task",
+  "thunderclerk-ai-draft-reply",
+  "thunderclerk-ai-summarize-forward",
+  "thunderclerk-ai-extract-contact",
+]);
+
+browser.menus.create({
+  id: "thunderclerk-ai-parent",
+  title: "ThunderClerk-AI",
+  contexts: ["message_list"],
+});
+
 browser.menus.create({
   id: "thunderclerk-ai-add-calendar",
+  parentId: "thunderclerk-ai-parent",
   title: "Add to Calendar",
   contexts: ["message_list"],
 });
 
 browser.menus.create({
   id: "thunderclerk-ai-add-task",
+  parentId: "thunderclerk-ai-parent",
   title: "Add as Task",
+  contexts: ["message_list"],
+});
+
+browser.menus.create({
+  id: "thunderclerk-ai-sep-1",
+  parentId: "thunderclerk-ai-parent",
+  type: "separator",
+  contexts: ["message_list"],
+});
+
+browser.menus.create({
+  id: "thunderclerk-ai-draft-reply",
+  parentId: "thunderclerk-ai-parent",
+  title: "Draft Reply",
+  contexts: ["message_list"],
+});
+
+browser.menus.create({
+  id: "thunderclerk-ai-summarize-forward",
+  parentId: "thunderclerk-ai-parent",
+  title: "Summarize & Forward",
+  contexts: ["message_list"],
+});
+
+browser.menus.create({
+  id: "thunderclerk-ai-sep-2",
+  parentId: "thunderclerk-ai-parent",
+  type: "separator",
+  contexts: ["message_list"],
+});
+
+browser.menus.create({
+  id: "thunderclerk-ai-extract-contact",
+  parentId: "thunderclerk-ai-parent",
+  title: "Extract Contact",
   contexts: ["message_list"],
 });
 
@@ -68,7 +123,8 @@ function normalizeTaskData(data) {
   return data;
 }
 
-// buildCalendarPrompt and buildTaskPrompt are defined in utils.js,
+// buildCalendarPrompt, buildTaskPrompt, buildDraftReplyPrompt,
+// buildSummarizeForwardPrompt, buildContactPrompt are defined in utils.js,
 // which is loaded before this script in the extension manifest.
 
 async function callOllama(host, model, prompt) {
@@ -151,14 +207,238 @@ function notifyError(title, message) {
   }).catch(() => {});
 }
 
-// --- Menu click handler ---
+// --- Shared helper: call Ollama with a progress notification ---
 
-browser.menus.onClicked.addListener(async (info, tab) => {
-  if (info.menuItemId !== "thunderclerk-ai-add-calendar" && info.menuItemId !== "thunderclerk-ai-add-task") {
+async function callOllamaWithNotification(host, model, prompt, actionLabel, settings) {
+  // Debug: show prompt preview if enabled
+  if (settings && settings.debugPromptPreview) {
+    await previewPrompt(prompt);
+  }
+
+  const THINKING_ID = "thunderclerk-ai-thinking";
+  browser.notifications.create(THINKING_ID, {
+    type: "basic",
+    title: "ThunderClerk-AI",
+    message: `Asking ${model} to ${actionLabel}…`,
+  }).catch(() => {});
+
+  let rawResponse;
+  try {
+    rawResponse = await callOllama(host, model, prompt);
+  } catch (e) {
+    browser.notifications.clear(THINKING_ID).catch(() => {});
+    throw e;
+  }
+  browser.notifications.clear(THINKING_ID).catch(() => {});
+
+  const jsonStr = extractJSON(rawResponse);
+  return JSON.parse(jsonStr);
+}
+
+// --- Action handlers ---
+
+async function handleCalendar(message, emailBody, settings) {
+  const host              = settings.ollamaHost        || DEFAULT_HOST;
+  const model             = settings.ollamaModel       || DEFAULTS.ollamaModel;
+  const attendeesSource   = settings.attendeesSource   || "from_to";
+  const attendeesStatic   = settings.attendeesStatic   || "";
+  const defaultCalendar   = settings.defaultCalendar   || "";
+  const descriptionFormat = settings.descriptionFormat || "body_from_subject";
+  const calendarUseCategory = !!settings.calendarUseCategory;
+
+  const mailDatetime  = formatDatetime(message.date);
+  const currentDt     = currentDatetime();
+  const author        = message.author || "";
+  const subject       = message.subject || "";
+  const attendeeHints = buildAttendeesHint(message, attendeesSource, attendeesStatic);
+
+  let categories = null;
+  if (calendarUseCategory) {
+    try {
+      categories = await browser.CalendarTools.getCategories();
+    } catch (e) {
+      console.warn("[ThunderClerk-AI] Could not fetch categories, proceeding without:", e.message);
+    }
+  }
+
+  const wantAiDescription = descriptionFormat === "ai_summary";
+  const prompt = buildCalendarPrompt(emailBody, subject, mailDatetime, currentDt, attendeeHints, categories, wantAiDescription);
+
+  const parsed = await callOllamaWithNotification(host, model, prompt, "extract event details", settings);
+
+  normalizeCalendarData(parsed);
+
+  const refYear = parseInt(currentDt.slice(-4), 10);
+  if (parsed.startDate) parsed.startDate = advancePastYear(parsed.startDate, refYear);
+  if (parsed.endDate)   parsed.endDate   = advancePastYear(parsed.endDate,   refYear);
+
+  if (!parsed.summary) parsed.summary = subject;
+
+  applyCalendarDefaults(parsed);
+
+  if (descriptionFormat === "ai_summary") {
+    if (!parsed.description) parsed.description = subject;
+  } else {
+    const description = buildDescription(emailBody, author, subject, descriptionFormat);
+    if (description) parsed.description = description;
+  }
+
+  if (defaultCalendar) parsed.calendar_name = defaultCalendar;
+
+  if (attendeesSource === "static") {
+    parsed.attendees = attendeesStatic ? [attendeesStatic] : [];
+  } else if (attendeesSource === "none") {
+    parsed.attendees = [];
+  }
+
+  // iCal all-day events use an exclusive DTEND (the day *after* the last
+  // visible day). Advance endDate by 1 day for multi-day all-day events so
+  // Thunderbird displays the correct last day.
+  if (parsed.forceAllDay && parsed.endDate && parsed.endDate !== parsed.startDate) {
+    parsed.endDate = addHoursToCalDate(parsed.endDate, 24);
+  }
+
+  await browser.CalendarTools.openCalendarDialog(parsed);
+}
+
+async function handleTask(message, emailBody, settings) {
+  const host                  = settings.ollamaHost            || DEFAULT_HOST;
+  const model                 = settings.ollamaModel           || DEFAULTS.ollamaModel;
+  const taskDescriptionFormat = settings.taskDescriptionFormat || "body_from_subject";
+  const taskDefaultDue        = settings.taskDefaultDue        || "none";
+  const taskUseCategory       = !!settings.taskUseCategory;
+
+  const mailDatetime  = formatDatetime(message.date);
+  const currentDt     = currentDatetime();
+  const author        = message.author || "";
+  const subject       = message.subject || "";
+
+  let categories = null;
+  if (taskUseCategory) {
+    try {
+      categories = await browser.CalendarTools.getCategories();
+    } catch (e) {
+      console.warn("[ThunderClerk-AI] Could not fetch categories, proceeding without:", e.message);
+    }
+  }
+
+  const wantAiDescription = taskDescriptionFormat === "ai_summary";
+  const prompt = buildTaskPrompt(emailBody, subject, mailDatetime, currentDt, categories, wantAiDescription);
+
+  const parsed = await callOllamaWithNotification(host, model, prompt, "extract task details", settings);
+
+  normalizeTaskData(parsed);
+
+  if (!parsed.dueDate && taskDefaultDue !== "none") {
+    const future = new Date();
+    future.setDate(future.getDate() + parseInt(taskDefaultDue, 10));
+    const y  = future.getFullYear();
+    const mo = String(future.getMonth() + 1).padStart(2, "0");
+    const d  = String(future.getDate()).padStart(2, "0");
+    parsed.dueDate = `${y}${mo}${d}T120000`;
+  }
+
+  if (taskDescriptionFormat === "ai_summary") {
+    if (!parsed.description) parsed.description = subject;
+  } else {
+    const taskDescription = buildDescription(emailBody, author, subject, taskDescriptionFormat);
+    if (taskDescription) parsed.description = taskDescription;
+  }
+
+  await browser.CalendarTools.openTaskDialog(parsed);
+}
+
+async function handleDraftReply(message, emailBody, settings) {
+  const host      = settings.ollamaHost  || DEFAULT_HOST;
+  const model     = settings.ollamaModel || DEFAULTS.ollamaModel;
+  const replyMode = settings.replyMode   || "replyToSender";
+  const author    = message.author || "";
+  const subject   = message.subject || "";
+
+  const prompt = buildDraftReplyPrompt(emailBody, subject, author);
+  const parsed = await callOllamaWithNotification(host, model, prompt, "draft a reply", settings);
+
+  const replyBody = (parsed.body || "").trim();
+  if (!replyBody) {
+    notifyError("Empty reply", "The AI returned an empty reply body.");
     return;
   }
 
-  const isCalendar = info.menuItemId === "thunderclerk-ai-add-calendar";
+  // Open compose window as reply
+  const composeTab = await browser.compose.beginReply(message.id, replyMode);
+
+  // Get the existing compose body (contains quoted original)
+  const details = await browser.compose.getComposeDetails(composeTab.id);
+
+  // Convert AI reply to HTML and prepend before quoted original
+  const escapedBody = replyBody
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\n/g, "<br>");
+
+  const newBody = `<p>${escapedBody}</p><br>` + (details.body || "");
+  await browser.compose.setComposeDetails(composeTab.id, { body: newBody });
+}
+
+async function handleSummarizeForward(message, emailBody, settings) {
+  const host   = settings.ollamaHost  || DEFAULT_HOST;
+  const model  = settings.ollamaModel || DEFAULTS.ollamaModel;
+  const author = message.author || "";
+  const subject = message.subject || "";
+
+  const prompt = buildSummarizeForwardPrompt(emailBody, subject, author);
+  const parsed = await callOllamaWithNotification(host, model, prompt, "summarize the email", settings);
+
+  const summary = (parsed.summary || "").trim();
+  if (!summary) {
+    notifyError("Empty summary", "The AI returned an empty summary.");
+    return;
+  }
+
+  // Open compose window as inline forward
+  const composeTab = await browser.compose.beginForward(message.id, "forwardInline");
+
+  const details = await browser.compose.getComposeDetails(composeTab.id);
+
+  const escapedSummary = summary
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\n/g, "<br>");
+
+  const newBody = `<p><strong>Summary:</strong><br>${escapedSummary}</p><hr>` + (details.body || "");
+  await browser.compose.setComposeDetails(composeTab.id, { body: newBody });
+}
+
+async function handleExtractContact(message, emailBody, settings) {
+  const host   = settings.ollamaHost  || DEFAULT_HOST;
+  const model  = settings.ollamaModel || DEFAULTS.ollamaModel;
+  const author = message.author || "";
+  const subject = message.subject || "";
+
+  const prompt = buildContactPrompt(emailBody, subject, author);
+  const parsed = await callOllamaWithNotification(host, model, prompt, "extract contact info", settings);
+
+  // Store extracted contact for the review popup to read
+  await browser.storage.local.set({
+    pendingContact: parsed,
+    contactAddressBook: settings.contactAddressBook || "",
+  });
+
+  // Open the review popup
+  await browser.windows.create({
+    type: "popup",
+    url: "contact/review.html",
+    width: 420,
+    height: 520,
+  });
+}
+
+// --- Menu click handler ---
+
+browser.menus.onClicked.addListener(async (info, tab) => {
+  if (!MENU_IDS.has(info.menuItemId)) return;
 
   const messages = info.selectedMessages && info.selectedMessages.messages;
   if (!messages || messages.length === 0) {
@@ -169,16 +449,6 @@ browser.menus.onClicked.addListener(async (info, tab) => {
 
   // Load settings
   const settings = await browser.storage.sync.get(DEFAULTS);
-  const host                  = settings.ollamaHost            || DEFAULT_HOST;
-  const model                 = settings.ollamaModel           || DEFAULTS.ollamaModel;
-  const attendeesSource       = settings.attendeesSource       || "from_to";
-  const attendeesStatic       = settings.attendeesStatic       || "";
-  const defaultCalendar       = settings.defaultCalendar       || "";
-  const descriptionFormat     = settings.descriptionFormat     || "body_from_subject";
-  const taskDescriptionFormat = settings.taskDescriptionFormat || "body_from_subject";
-  const taskDefaultDue        = settings.taskDefaultDue        || "none";
-  const calendarUseCategory   = !!settings.calendarUseCategory;
-  const taskUseCategory       = !!settings.taskUseCategory;
 
   // Get full message body
   let emailBody = "";
@@ -194,140 +464,25 @@ browser.menus.onClicked.addListener(async (info, tab) => {
     return;
   }
 
-  // Build context values
-  const mailDatetime  = formatDatetime(message.date);
-  const currentDt     = currentDatetime();
-  const author        = message.author || "";
-  const subject       = message.subject || "";
-  const attendeeHints = buildAttendeesHint(message, attendeesSource, attendeesStatic);
-
-  // Fetch categories if the user opted in for this action type
-  let categories = null;
-  const wantCategories = isCalendar ? calendarUseCategory : taskUseCategory;
-  if (wantCategories) {
-    try {
-      categories = await browser.CalendarTools.getCategories();
-    } catch (e) {
-      console.warn("[ThunderClerk-AI] Could not fetch categories, proceeding without:", e.message);
-    }
-  }
-
-  // Build prompt
-  const wantAiDescription = isCalendar
-    ? descriptionFormat === "ai_summary"
-    : taskDescriptionFormat === "ai_summary";
-  const prompt = isCalendar
-    ? buildCalendarPrompt(emailBody, subject, mailDatetime, currentDt, attendeeHints, categories, wantAiDescription)
-    : buildTaskPrompt(emailBody, subject, mailDatetime, currentDt, categories, wantAiDescription);
-
-  // Debug: show prompt preview if enabled
-  if (settings.debugPromptPreview) {
-    try {
-      await previewPrompt(prompt);
-    } catch (e) {
-      // User cancelled or closed the preview window
-      return;
-    }
-  }
-
-  // Call Ollama — show a progress notification while we wait
-  const THINKING_ID = "thunderclerk-ai-thinking";
-  browser.notifications.create(THINKING_ID, {
-    type: "basic",
-    title: "ThunderClerk-AI",
-    message: `Asking ${model} to extract ${isCalendar ? "event" : "task"} details…`,
-  }).catch(() => {});
-
-  let rawResponse;
+  // Dispatch to the appropriate handler
   try {
-    rawResponse = await callOllama(host, model, prompt);
-  } catch (e) {
-    browser.notifications.clear(THINKING_ID).catch(() => {});
-    notifyError("Ollama error", e.message);
-    return;
-  }
-  browser.notifications.clear(THINKING_ID).catch(() => {});
-
-  // Parse JSON
-  let parsed;
-  try {
-    const jsonStr = extractJSON(rawResponse);
-    parsed = JSON.parse(jsonStr);
-  } catch (e) {
-    console.error("[ThunderClerk-AI] JSON parse failed:", e.message, "\nRaw response:", rawResponse);
-    notifyError("Parse error", "Model returned invalid JSON. Check the browser console for details.");
-    return;
-  }
-
-  // Open dialog
-  if (isCalendar) {
-    normalizeCalendarData(parsed);
-
-    // If the model returned a training-data year older than the email year, fix it.
-    const refYear = parseInt(currentDt.slice(-4), 10);
-    if (parsed.startDate) parsed.startDate = advancePastYear(parsed.startDate, refYear);
-    if (parsed.endDate)   parsed.endDate   = advancePastYear(parsed.endDate,   refYear);
-
-    // Fall back to email subject when the model omits the summary field.
-    if (!parsed.summary) parsed.summary = subject;
-
-    applyCalendarDefaults(parsed);
-
-    // Inject description
-    if (descriptionFormat === "ai_summary") {
-      // Keep the AI-extracted description; fall back to subject if absent
-      if (!parsed.description) parsed.description = subject;
-    } else {
-      const description = buildDescription(emailBody, author, subject, descriptionFormat);
-      if (description) parsed.description = description;
-    }
-
-    // Inject calendar preference
-    if (defaultCalendar) parsed.calendar_name = defaultCalendar;
-
-    // For "static" or "none" attendees, override whatever the AI returned
-    if (attendeesSource === "static") {
-      parsed.attendees = attendeesStatic ? [attendeesStatic] : [];
-    } else if (attendeesSource === "none") {
-      parsed.attendees = [];
-    }
-  } else {
-    normalizeTaskData(parsed);
-
-    // Apply default due date if the model didn't find one and user configured a fallback
-    if (!parsed.dueDate && taskDefaultDue !== "none") {
-      const future = new Date();
-      future.setDate(future.getDate() + parseInt(taskDefaultDue, 10));
-      const y  = future.getFullYear();
-      const mo = String(future.getMonth() + 1).padStart(2, "0");
-      const d  = String(future.getDate()).padStart(2, "0");
-      parsed.dueDate = `${y}${mo}${d}T120000`;
-    }
-
-    // Description for tasks
-    if (taskDescriptionFormat === "ai_summary") {
-      if (!parsed.description) parsed.description = subject;
-    } else {
-      const taskDescription = buildDescription(emailBody, author, subject, taskDescriptionFormat);
-      if (taskDescription) parsed.description = taskDescription;
-    }
-  }
-
-  // iCal all-day events use an exclusive DTEND (the day *after* the last
-  // visible day). Advance endDate by 1 day for multi-day all-day events so
-  // Thunderbird displays the correct last day.  Single-day events
-  // (startDate === endDate) are left alone — Thunderbird handles those correctly.
-  if (isCalendar && parsed.forceAllDay && parsed.endDate && parsed.endDate !== parsed.startDate) {
-    parsed.endDate = addHoursToCalDate(parsed.endDate, 24);
-  }
-
-  try {
-    if (isCalendar) {
-      await browser.CalendarTools.openCalendarDialog(parsed);
-    } else {
-      await browser.CalendarTools.openTaskDialog(parsed);
+    if (info.menuItemId === "thunderclerk-ai-add-calendar") {
+      await handleCalendar(message, emailBody, settings);
+    } else if (info.menuItemId === "thunderclerk-ai-add-task") {
+      await handleTask(message, emailBody, settings);
+    } else if (info.menuItemId === "thunderclerk-ai-draft-reply") {
+      await handleDraftReply(message, emailBody, settings);
+    } else if (info.menuItemId === "thunderclerk-ai-summarize-forward") {
+      await handleSummarizeForward(message, emailBody, settings);
+    } else if (info.menuItemId === "thunderclerk-ai-extract-contact") {
+      await handleExtractContact(message, emailBody, settings);
     }
   } catch (e) {
-    notifyError("Dialog error", e.message);
+    if (e.message?.includes("invalid JSON") || e.message?.includes("No JSON object") || e.message?.includes("Unclosed JSON")) {
+      console.error("[ThunderClerk-AI] JSON parse failed:", e.message);
+      notifyError("Parse error", "Model returned invalid JSON. Check the browser console for details.");
+    } else {
+      notifyError("Error", e.message);
+    }
   }
 });

@@ -151,6 +151,28 @@
   </div>
   <div class="hint">Ask the AI to pick the best matching category from your Thunderbird calendar categories.</div>
 
+  <!-- Compose actions -->
+  <h3>Compose Actions</h3>
+
+  <label for="replyMode">Draft Reply Mode</label>
+  <select id="replyMode">
+    <option value="replyToSender">Reply to sender only (default)</option>
+    <option value="replyToAll">Reply to all</option>
+  </select>
+  <div class="hint">Whether "Draft Reply" replies to the sender only or to all recipients.</div>
+
+  <!-- Contacts -->
+  <h3>Contacts</h3>
+
+  <label for="contactAddressBook">Default Address Book</label>
+  <div class="row">
+    <select id="contactAddressBook">
+      <option value="">Use first available</option>
+    </select>
+    <button id="refresh-addressbooks">Refresh</button>
+  </div>
+  <div class="hint">Which address book to save extracted contacts to.</div>
+
   <!-- Debug -->
   <h3>Debug</h3>
 

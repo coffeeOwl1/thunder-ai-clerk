@@ -11,6 +11,9 @@ const {
   buildCategoryInstruction,
   buildCalendarPrompt,
   buildTaskPrompt,
+  buildDraftReplyPrompt,
+  buildSummarizeForwardPrompt,
+  buildContactPrompt,
   sanitizeForPrompt,
   isValidHostUrl,
   extractTextBody,
@@ -709,5 +712,126 @@ describe("advancePastYear", () => {
 
   test("works with date-only strings (no T)", () => {
     expect(advancePastYear("20230302T000000", 2026)).toBe("20260302T000000");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildDraftReplyPrompt
+// ---------------------------------------------------------------------------
+describe("buildDraftReplyPrompt", () => {
+  const body = "Can we reschedule our meeting to Thursday?";
+  const subject = "Meeting Reschedule";
+  const author = "alice@example.com";
+
+  test("includes reply instruction", () => {
+    const prompt = buildDraftReplyPrompt(body, subject, author);
+    expect(prompt).toMatch(/reply/i);
+  });
+
+  test("instructs no greeting or sign-off", () => {
+    const prompt = buildDraftReplyPrompt(body, subject, author);
+    expect(prompt).toMatch(/no.*greeting/i);
+    expect(prompt).toMatch(/no.*sign-off/i);
+  });
+
+  test("requests JSON with body field", () => {
+    const prompt = buildDraftReplyPrompt(body, subject, author);
+    expect(prompt).toContain('"body"');
+  });
+
+  test("requests plain text output", () => {
+    const prompt = buildDraftReplyPrompt(body, subject, author);
+    expect(prompt).toMatch(/plain text/i);
+  });
+
+  test("includes author, subject, and email body", () => {
+    const prompt = buildDraftReplyPrompt(body, subject, author);
+    expect(prompt).toContain(author);
+    expect(prompt).toContain(subject);
+    expect(prompt).toContain(body);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildSummarizeForwardPrompt
+// ---------------------------------------------------------------------------
+describe("buildSummarizeForwardPrompt", () => {
+  const body = "The Q1 budget review is scheduled for March 15. Revenue is up 12% YoY.";
+  const subject = "Q1 Budget Review";
+  const author = "bob@example.com";
+
+  test("includes summarize instruction", () => {
+    const prompt = buildSummarizeForwardPrompt(body, subject, author);
+    expect(prompt).toMatch(/summarize/i);
+  });
+
+  test("requests TL;DR and bullet points", () => {
+    const prompt = buildSummarizeForwardPrompt(body, subject, author);
+    expect(prompt).toMatch(/TL;DR/i);
+    expect(prompt).toMatch(/bullet/i);
+  });
+
+  test("specifies word limit", () => {
+    const prompt = buildSummarizeForwardPrompt(body, subject, author);
+    expect(prompt).toMatch(/150 words/i);
+  });
+
+  test("instructs to preserve dates and numbers", () => {
+    const prompt = buildSummarizeForwardPrompt(body, subject, author);
+    expect(prompt).toMatch(/dates/i);
+    expect(prompt).toMatch(/numbers/i);
+  });
+
+  test("requests JSON with summary field", () => {
+    const prompt = buildSummarizeForwardPrompt(body, subject, author);
+    expect(prompt).toContain('"summary"');
+  });
+
+  test("includes author, subject, and email body", () => {
+    const prompt = buildSummarizeForwardPrompt(body, subject, author);
+    expect(prompt).toContain(author);
+    expect(prompt).toContain(subject);
+    expect(prompt).toContain(body);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildContactPrompt
+// ---------------------------------------------------------------------------
+describe("buildContactPrompt", () => {
+  const body = "Best regards,\nJane Smith\nSenior Engineer at Acme Corp\njane@acme.com\n+1 555-0123";
+  const subject = "Project Update";
+  const author = "Jane Smith <jane@acme.com>";
+
+  test("includes contact extraction instruction", () => {
+    const prompt = buildContactPrompt(body, subject, author);
+    expect(prompt).toMatch(/extract.*contact/i);
+  });
+
+  test("requests expected JSON fields", () => {
+    const prompt = buildContactPrompt(body, subject, author);
+    expect(prompt).toContain('"firstName"');
+    expect(prompt).toContain('"lastName"');
+    expect(prompt).toContain('"email"');
+    expect(prompt).toContain('"phone"');
+    expect(prompt).toContain('"company"');
+    expect(prompt).toContain('"jobTitle"');
+    expect(prompt).toContain('"website"');
+  });
+
+  test("includes author as a hint", () => {
+    const prompt = buildContactPrompt(body, subject, author);
+    expect(prompt).toContain(author);
+  });
+
+  test("instructs not to guess missing fields", () => {
+    const prompt = buildContactPrompt(body, subject, author);
+    expect(prompt).toMatch(/omit/i);
+  });
+
+  test("includes subject and email body", () => {
+    const prompt = buildContactPrompt(body, subject, author);
+    expect(prompt).toContain(subject);
+    expect(prompt).toContain(body);
   });
 });

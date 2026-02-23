@@ -22,6 +22,8 @@
     "storage",
     "messageDisplay",
     "notifications",
+    "compose",
+    "addressBooks",
     "<all_urls>"
   ],
 

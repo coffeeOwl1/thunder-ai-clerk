@@ -372,6 +372,66 @@ ${safeBody}
 Remember: extract only the task details from the email above. Respond with the specified JSON structure only.`;
 }
 
+function buildDraftReplyPrompt(emailBody, subject, author) {
+  return `Draft a professional reply to the following email. Match the tone of the original — formal if the email is formal, casual if casual.
+
+Rules:
+- Do NOT include a greeting (e.g. "Hi Name,") or sign-off (e.g. "Best regards") — the email client handles those.
+- Write plain text only, no HTML or markdown.
+- Keep the reply concise and relevant to the email content.
+- If the email asks questions, answer them. If it's informational, acknowledge it appropriately.
+
+Respond with JSON only — no explanation, no markdown fences. Use this structure:
+{
+"body": "Your reply text here"
+}
+From: ${author}
+Subject: "${subject}"
+Email body: "${emailBody}"`;
+}
+
+function buildSummarizeForwardPrompt(emailBody, subject, author) {
+  return `Summarize the following email for forwarding. Produce a TL;DR line followed by bullet points covering the key information.
+
+Rules:
+- Keep the summary under 150 words.
+- Preserve specific dates, names, numbers, and deadlines mentioned in the email.
+- Write plain text only, no HTML or markdown.
+- Start with a one-line TL;DR, then use bullet points (lines starting with "- ") for details.
+
+Respond with JSON only — no explanation, no markdown fences. Use this structure:
+{
+"summary": "TL;DR: ...\n\n- Point 1\n- Point 2\n- ..."
+}
+From: ${author}
+Subject: "${subject}"
+Email body: "${emailBody}"`;
+}
+
+function buildContactPrompt(emailBody, subject, author) {
+  return `Extract contact information from the following email. Look for details in the email signature, body, and headers.
+
+Rules:
+- Extract: first name, last name, email addresses, phone numbers, company/organization, job title, website URL.
+- Use the From header as a hint for the primary contact: ${author}
+- If the email signature contains a name, prefer that over parsing the From header.
+- Omit any field you cannot find — do not guess or invent information.
+- For phone numbers, preserve the original formatting.
+
+Respond with JSON only — no explanation, no markdown fences. Use this structure (include only fields found):
+{
+"firstName": "First",
+"lastName": "Last",
+"email": "contact@example.com",
+"phone": "+1 555-0100",
+"company": "Company Name",
+"jobTitle": "Job Title",
+"website": "https://example.com"
+}
+Subject: "${subject}"
+Email body: "${emailBody}"`;
+}
+
 // Node.js export (used by Jest tests). Browser environment ignores this block.
 if (typeof module !== "undefined") {
   module.exports = {
@@ -387,6 +447,9 @@ if (typeof module !== "undefined") {
     buildCategoryInstruction,
     buildCalendarPrompt,
     buildTaskPrompt,
+    buildDraftReplyPrompt,
+    buildSummarizeForwardPrompt,
+    buildContactPrompt,
     isValidHostUrl,
     formatDatetime,
     currentDatetime,
