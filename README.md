@@ -14,6 +14,7 @@ No cloud accounts, no API keys, no text selection required — just Thunderbird 
 - **Summarize & Forward** — produce a TL;DR + bullet-point summary for forwarding
 - **Extract Contact** — pull contact info from email signatures into your address book
 - **Catalog Email** — auto-tag emails using AI, with support for existing Thunderbird tags
+- **Auto Analyze** — single-click analysis: get a summary, detected events/tasks/contacts, and batch-select which actions to execute (reply, forward, catalog, archive, delete). Also available via keyboard shortcut (`Ctrl+Shift+E`). Includes fallback overrides when the AI doesn't detect an item type.
 - AI extracts title, dates, times, attendees, and (optionally) category
 - Reads the full email body — no need to select text first
 - All processing is done locally via your own Ollama instance
@@ -59,6 +60,29 @@ After installation the Settings page opens automatically. You can also reach it 
 | Auto-tag after actions | On | Automatically tag emails after using other actions |
 | Allow new tags | Off | Let the AI create new tags (experimental — may clutter your tag list) |
 
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|---|---|
+| `Ctrl+Shift+E` | Auto Analyze the displayed email |
+
+You can customize the shortcut in **Add-ons Manager → gear icon → Manage Extension Shortcuts**.
+
+## Permissions
+
+The extension requests these permissions:
+
+- **messagesRead** — read email content for AI analysis
+- **messagesMove** — archive emails (via Auto Analyze)
+- **messagesDelete** — delete emails (via Auto Analyze)
+- **messageDisplay** — detect which message is open (for keyboard shortcut)
+- **menus** — add right-click context menu items
+- **storage** — save settings
+- **compose** — create reply/forward drafts
+- **addressBooks** — save extracted contacts
+- **notifications** — show progress/error notifications
+- **messagesTags / messagesTagsList / messagesUpdate** — catalog/tag emails
+
 ## Privacy
 
 Email content is sent to the Ollama host you configure — by default your own machine. Nothing is sent to the extension developer or any third party. See [PRIVACY.md](PRIVACY.md) for details.
@@ -73,7 +97,7 @@ The CalendarTools experiment API is adapted from [ThunderAI Sparks](https://micz
 
 ```bash
 npm install        # install Jest for tests
-npm test           # unit tests (~136 cases)
+npm test           # unit tests (~178 cases)
 npm run test:integration  # integration tests (needs running Ollama)
 ```
 

@@ -26,6 +26,7 @@ const MENU_IDS = new Set([
   "thunderclerk-ai-summarize-forward",
   "thunderclerk-ai-extract-contact",
   "thunderclerk-ai-catalog-email",
+  "thunderclerk-ai-auto-analyze",
 ]);
 
 browser.menus.create({
@@ -97,6 +98,20 @@ browser.menus.create({
   contexts: ["message_list"],
 });
 
+browser.menus.create({
+  id: "thunderclerk-ai-sep-4",
+  parentId: "thunderclerk-ai-parent",
+  type: "separator",
+  contexts: ["message_list"],
+});
+
+browser.menus.create({
+  id: "thunderclerk-ai-auto-analyze",
+  parentId: "thunderclerk-ai-parent",
+  title: "Auto Analyze",
+  contexts: ["message_list"],
+});
+
 // Pure utility functions (normalizeCalDate, extractJSON, buildAttendeesHint,
 // buildDescription, buildCategoryInstruction, isValidHostUrl, etc.) are
 // defined in utils.js, which is loaded before this script.
@@ -122,7 +137,7 @@ function normalizeTaskData(data) {
 // buildSummarizeForwardPrompt, buildContactPrompt are defined in utils.js,
 // which is loaded before this script in the extension manifest.
 
-async function callOllama(host, model, prompt) {
+async function callOllama(host, model, prompt, options = {}) {
   if (!isValidHostUrl(host)) {
     throw new Error(`Invalid Ollama host URL: "${host}". Check the extension settings.`);
   }
@@ -130,19 +145,28 @@ async function callOllama(host, model, prompt) {
   if (DEBUG) console.log("[ThunderClerk-AI] Calling Ollama", { url, model, promptLen: prompt.length });
 
   const controller = new AbortController();
-  const timeoutId  = setTimeout(() => controller.abort(), 60_000);
+  const timeoutMs  = prompt.length > 5000 ? 180_000 : 60_000;
+  const timeoutId  = setTimeout(() => controller.abort(), timeoutMs);
+
+  const body = { model, prompt, stream: false };
+  const ollamaOpts = {};
+  if (options.num_predict) ollamaOpts.num_predict = options.num_predict;
+  if (options.num_ctx) ollamaOpts.num_ctx = options.num_ctx;
+  if (options.temperature !== undefined) ollamaOpts.temperature = options.temperature;
+  if (Object.keys(ollamaOpts).length > 0) body.options = ollamaOpts;
+  if (options.format) body.format = options.format;
 
   let response;
   try {
     response = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model, prompt, stream: false }),
+      body: JSON.stringify(body),
       signal: controller.signal,
     });
   } catch (e) {
     clearTimeout(timeoutId);
-    if (e.name === "AbortError") throw new Error("Ollama request timed out after 60 seconds.");
+    if (e.name === "AbortError") throw new Error(`Ollama request timed out after ${timeoutMs / 1000} seconds.`);
     throw e;
   }
   clearTimeout(timeoutId);
@@ -202,29 +226,69 @@ function notifyError(title, message) {
   }).catch(() => {});
 }
 
+// --- Progress notification with elapsed time ---
+
+const THINKING_ID = "thunderclerk-ai-thinking";
+const PROGRESS_INTERVAL_MS = 3000;
+const STILL_WORKING_THRESHOLD_S = 60;
+
+function createProgressNotifier(actionLabel, model) {
+  let intervalId = null;
+  let startTime = null;
+
+  function buildMessage(elapsedS) {
+    const base = elapsedS >= STILL_WORKING_THRESHOLD_S
+      ? `Still working\u2026 ${actionLabel}`
+      : `Asking ${model} to ${actionLabel}\u2026`;
+    return elapsedS > 0 ? `${base} (${elapsedS}s)` : base;
+  }
+
+  return {
+    start() {
+      startTime = Date.now();
+      browser.notifications.create(THINKING_ID, {
+        type: "basic",
+        title: "ThunderClerk-AI",
+        message: buildMessage(0),
+      }).catch(() => {});
+
+      intervalId = setInterval(() => {
+        const elapsedS = Math.round((Date.now() - startTime) / 1000);
+        browser.notifications.create(THINKING_ID, {
+          type: "basic",
+          title: "ThunderClerk-AI",
+          message: buildMessage(elapsedS),
+        }).catch(() => {});
+      }, PROGRESS_INTERVAL_MS);
+    },
+
+    stop() {
+      if (intervalId !== null) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+      browser.notifications.clear(THINKING_ID).catch(() => {});
+    },
+  };
+}
+
 // --- Shared helper: call Ollama with a progress notification ---
 
-async function callOllamaWithNotification(host, model, prompt, actionLabel, settings) {
+async function callOllamaWithNotification(host, model, prompt, actionLabel, settings, ollamaOptions = {}) {
   // Debug: show prompt preview if enabled
   if (settings && settings.debugPromptPreview) {
     await previewPrompt(prompt);
   }
 
-  const THINKING_ID = "thunderclerk-ai-thinking";
-  browser.notifications.create(THINKING_ID, {
-    type: "basic",
-    title: "ThunderClerk-AI",
-    message: `Asking ${model} to ${actionLabel}…`,
-  }).catch(() => {});
+  const progress = createProgressNotifier(actionLabel, model);
+  progress.start();
 
   let rawResponse;
   try {
-    rawResponse = await callOllama(host, model, prompt);
-  } catch (e) {
-    browser.notifications.clear(THINKING_ID).catch(() => {});
-    throw e;
+    rawResponse = await callOllama(host, model, prompt, ollamaOptions);
+  } finally {
+    progress.stop();
   }
-  browser.notifications.clear(THINKING_ID).catch(() => {});
 
   const jsonStr = extractJSON(rawResponse);
   return JSON.parse(jsonStr);
@@ -237,13 +301,10 @@ async function handleCalendar(message, emailBody, settings) {
   const model             = settings.ollamaModel       || DEFAULTS.ollamaModel;
   const attendeesSource   = settings.attendeesSource   || "from_to";
   const attendeesStatic   = settings.attendeesStatic   || "";
-  const defaultCalendar   = settings.defaultCalendar   || "";
-  const descriptionFormat = settings.descriptionFormat || "body_from_subject";
   const calendarUseCategory = !!settings.calendarUseCategory;
 
   const mailDatetime  = formatDatetime(message.date);
   const currentDt     = currentDatetime();
-  const author        = message.author || "";
   const subject       = message.subject || "";
   const attendeeHints = buildAttendeesHint(message, attendeesSource, attendeesStatic);
 
@@ -256,56 +317,24 @@ async function handleCalendar(message, emailBody, settings) {
     }
   }
 
+  const descriptionFormat = settings.descriptionFormat || "body_from_subject";
   const wantAiDescription = descriptionFormat === "ai_summary";
   const prompt = buildCalendarPrompt(emailBody, subject, mailDatetime, currentDt, attendeeHints, categories, wantAiDescription);
 
   const parsed = await callOllamaWithNotification(host, model, prompt, "extract event details", settings);
 
-  normalizeCalendarData(parsed);
-
-  const refYear = parseInt(currentDt.slice(-4), 10);
-  if (parsed.startDate) parsed.startDate = advancePastYear(parsed.startDate, refYear);
-  if (parsed.endDate)   parsed.endDate   = advancePastYear(parsed.endDate,   refYear);
-
-  if (!parsed.summary) parsed.summary = subject;
-
-  applyCalendarDefaults(parsed);
-
-  if (descriptionFormat === "ai_summary") {
-    if (!parsed.description) parsed.description = subject;
-  } else {
-    const description = buildDescription(emailBody, author, subject, descriptionFormat);
-    if (description) parsed.description = description;
-  }
-
-  if (defaultCalendar) parsed.calendar_name = defaultCalendar;
-
-  if (attendeesSource === "static") {
-    parsed.attendees = attendeesStatic ? [attendeesStatic] : [];
-  } else if (attendeesSource === "none") {
-    parsed.attendees = [];
-  }
-
-  // iCal all-day events use an exclusive DTEND (the day *after* the last
-  // visible day). Advance endDate by 1 day for multi-day all-day events so
-  // Thunderbird displays the correct last day.
-  if (parsed.forceAllDay && parsed.endDate && parsed.endDate !== parsed.startDate) {
-    parsed.endDate = addHoursToCalDate(parsed.endDate, 24);
-  }
+  applyEventSettings(parsed, message, emailBody, settings);
 
   await browser.CalendarTools.openCalendarDialog(parsed);
 }
 
 async function handleTask(message, emailBody, settings) {
-  const host                  = settings.ollamaHost            || DEFAULT_HOST;
-  const model                 = settings.ollamaModel           || DEFAULTS.ollamaModel;
-  const taskDescriptionFormat = settings.taskDescriptionFormat || "body_from_subject";
-  const taskDefaultDue        = settings.taskDefaultDue        || "none";
-  const taskUseCategory       = !!settings.taskUseCategory;
+  const host              = settings.ollamaHost            || DEFAULT_HOST;
+  const model             = settings.ollamaModel           || DEFAULTS.ollamaModel;
+  const taskUseCategory   = !!settings.taskUseCategory;
 
   const mailDatetime  = formatDatetime(message.date);
   const currentDt     = currentDatetime();
-  const author        = message.author || "";
   const subject       = message.subject || "";
 
   let categories = null;
@@ -317,28 +346,13 @@ async function handleTask(message, emailBody, settings) {
     }
   }
 
+  const taskDescriptionFormat = settings.taskDescriptionFormat || "body_from_subject";
   const wantAiDescription = taskDescriptionFormat === "ai_summary";
   const prompt = buildTaskPrompt(emailBody, subject, mailDatetime, currentDt, categories, wantAiDescription);
 
   const parsed = await callOllamaWithNotification(host, model, prompt, "extract task details", settings);
 
-  normalizeTaskData(parsed);
-
-  if (!parsed.dueDate && taskDefaultDue !== "none") {
-    const future = new Date();
-    future.setDate(future.getDate() + parseInt(taskDefaultDue, 10));
-    const y  = future.getFullYear();
-    const mo = String(future.getMonth() + 1).padStart(2, "0");
-    const d  = String(future.getDate()).padStart(2, "0");
-    parsed.dueDate = `${y}${mo}${d}T120000`;
-  }
-
-  if (taskDescriptionFormat === "ai_summary") {
-    if (!parsed.description) parsed.description = subject;
-  } else {
-    const taskDescription = buildDescription(emailBody, author, subject, taskDescriptionFormat);
-    if (taskDescription) parsed.description = taskDescription;
-  }
+  applyTaskSettings(parsed, message, emailBody, settings);
 
   await browser.CalendarTools.openTaskDialog(parsed);
 }
@@ -514,6 +528,422 @@ async function catalogEmail(message, emailBody, settings) {
   }).catch(() => {});
 }
 
+// --- Shared helpers for applying settings to extracted event/task data ---
+
+function applyEventSettings(parsed, message, emailBody, settings) {
+  const descriptionFormat = settings.descriptionFormat || "body_from_subject";
+  const attendeesSource   = settings.attendeesSource   || "from_to";
+  const attendeesStatic   = settings.attendeesStatic   || "";
+  const defaultCalendar   = settings.defaultCalendar   || "";
+  const author            = message.author || "";
+  const subject           = message.subject || "";
+
+  normalizeCalendarData(parsed);
+
+  // Use the email's year as the reference for advancePastYear, not today's year.
+  // This preserves correct dates when processing old emails.
+  const emailYear = message.date ? new Date(message.date).getFullYear() : new Date().getFullYear();
+  const refYear = emailYear;
+  if (parsed.startDate) parsed.startDate = advancePastYear(parsed.startDate, refYear);
+  if (parsed.endDate)   parsed.endDate   = advancePastYear(parsed.endDate,   refYear);
+
+  if (!parsed.summary) parsed.summary = subject;
+
+  applyCalendarDefaults(parsed);
+
+  if (descriptionFormat === "ai_summary") {
+    if (!parsed.description) parsed.description = subject;
+  } else {
+    const description = buildDescription(emailBody, author, subject, descriptionFormat);
+    if (description) parsed.description = description;
+  }
+
+  if (defaultCalendar) parsed.calendar_name = defaultCalendar;
+
+  if (attendeesSource === "static") {
+    parsed.attendees = attendeesStatic ? [attendeesStatic] : [];
+  } else if (attendeesSource === "none") {
+    parsed.attendees = [];
+  }
+
+  // iCal all-day events use an exclusive DTEND
+  if (parsed.forceAllDay && parsed.endDate && parsed.endDate !== parsed.startDate) {
+    parsed.endDate = addHoursToCalDate(parsed.endDate, 24);
+  }
+
+  return parsed;
+}
+
+function applyTaskSettings(parsed, message, emailBody, settings) {
+  const taskDescriptionFormat = settings.taskDescriptionFormat || "body_from_subject";
+  const taskDefaultDue        = settings.taskDefaultDue        || "none";
+  const author                = message.author || "";
+  const subject               = message.subject || "";
+
+  normalizeTaskData(parsed);
+
+  if (!parsed.dueDate && taskDefaultDue !== "none") {
+    const future = new Date();
+    future.setDate(future.getDate() + parseInt(taskDefaultDue, 10));
+    const y  = future.getFullYear();
+    const mo = String(future.getMonth() + 1).padStart(2, "0");
+    const d  = String(future.getDate()).padStart(2, "0");
+    parsed.dueDate = `${y}${mo}${d}T120000`;
+  }
+
+  if (taskDescriptionFormat === "ai_summary") {
+    if (!parsed.description) parsed.description = subject;
+  } else {
+    const taskDescription = buildDescription(emailBody, author, subject, taskDescriptionFormat);
+    if (taskDescription) parsed.description = taskDescription;
+  }
+
+  return parsed;
+}
+
+// --- Auto Analyze ---
+
+function openAnalyzeDialog(analysis) {
+  return new Promise((resolve) => {
+    browser.storage.local.set({ pendingAnalysis: analysis }).then(() => {
+      const listener = (msg) => {
+        if (msg && msg.analyzeAction) {
+          browser.runtime.onMessage.removeListener(listener);
+          browser.storage.local.remove("pendingAnalysis").catch(() => {});
+          if (msg.analyzeAction === "ok") {
+            resolve(msg.selections);
+          } else {
+            resolve(null);
+          }
+        }
+      };
+      browser.runtime.onMessage.addListener(listener);
+
+      browser.windows.create({
+        url: browser.runtime.getURL("analyze/analyze.html"),
+        type: "popup",
+        width: 580,
+        height: 640,
+      }).then((win) => {
+        const onRemoved = (windowId) => {
+          if (windowId === win.id) {
+            browser.windows.onRemoved.removeListener(onRemoved);
+            browser.runtime.onMessage.removeListener(listener);
+            browser.storage.local.remove("pendingAnalysis").catch(() => {});
+            resolve(null);
+          }
+        };
+        browser.windows.onRemoved.addListener(onRemoved);
+      });
+    });
+  });
+}
+
+async function executeAnalysisSelections(message, emailBody, settings, analysis, selections) {
+  const host    = settings.ollamaHost  || DEFAULT_HOST;
+  const model   = settings.ollamaModel || DEFAULTS.ollamaModel;
+  const author  = message.author  || "";
+  const subject = message.subject || "";
+  const mailDatetime = formatDatetime(message.date);
+  const currentDt    = currentDatetime();
+
+  // --- Calendar events ---
+  if (selections.events && selections.events.length > 0 && analysis.events) {
+    try {
+      const attendeesSource = settings.attendeesSource || "from_to";
+      const attendeesStatic = settings.attendeesStatic || "";
+      const attendeeHints   = buildAttendeesHint(message, attendeesSource, attendeesStatic);
+      const calendarUseCategory = !!settings.calendarUseCategory;
+
+      let categories = null;
+      if (calendarUseCategory) {
+        try { categories = await browser.CalendarTools.getCategories(); } catch {}
+      }
+
+      const wantAiDescription = (settings.descriptionFormat || "body_from_subject") === "ai_summary";
+      const prompt = buildCalendarArrayPrompt(
+        emailBody, subject, mailDatetime, currentDt, attendeeHints,
+        categories, wantAiDescription, analysis.events, selections.events
+      );
+      const parsed = await callOllamaWithNotification(host, model, prompt, "extract event details", settings);
+      const events = parsed.events || [parsed];
+
+      for (const evt of events) {
+        applyEventSettings(evt, message, emailBody, settings);
+        await browser.CalendarTools.openCalendarDialog(evt);
+      }
+    } catch (e) {
+      console.error("[ThunderClerk-AI] Auto Analyze — calendar extraction failed:", e.message);
+      notifyError("Calendar error", e.message);
+    }
+  }
+
+  // --- Tasks ---
+  if (selections.tasks && selections.tasks.length > 0 && analysis.tasks) {
+    try {
+      const taskUseCategory = !!settings.taskUseCategory;
+      let categories = null;
+      if (taskUseCategory) {
+        try { categories = await browser.CalendarTools.getCategories(); } catch {}
+      }
+
+      const wantAiDescription = (settings.taskDescriptionFormat || "body_from_subject") === "ai_summary";
+      const prompt = buildTaskArrayPrompt(
+        emailBody, subject, mailDatetime, currentDt,
+        categories, wantAiDescription, analysis.tasks, selections.tasks
+      );
+      const parsed = await callOllamaWithNotification(host, model, prompt, "extract task details", settings);
+      const tasks = parsed.tasks || [parsed];
+
+      for (const task of tasks) {
+        applyTaskSettings(task, message, emailBody, settings);
+        await browser.CalendarTools.openTaskDialog(task);
+      }
+    } catch (e) {
+      console.error("[ThunderClerk-AI] Auto Analyze — task extraction failed:", e.message);
+      notifyError("Task error", e.message);
+    }
+  }
+
+  // --- Contacts ---
+  if (selections.contacts && selections.contacts.length > 0 && analysis.contacts) {
+    try {
+      const prompt = buildContactArrayPrompt(
+        emailBody, subject, author, analysis.contacts, selections.contacts
+      );
+      const parsed = await callOllamaWithNotification(host, model, prompt, "extract contact info", settings);
+      const contacts = parsed.contacts || [parsed];
+
+      for (const contact of contacts) {
+        await browser.storage.local.set({
+          pendingContact: contact,
+          contactAddressBook: settings.contactAddressBook || "",
+        });
+        // Open review window and wait for it to close before the next one
+        await new Promise((resolve) => {
+          browser.windows.create({
+            type: "popup",
+            url: "contact/review.html",
+            width: 420,
+            height: 520,
+          }).then((win) => {
+            const onRemoved = (windowId) => {
+              if (windowId === win.id) {
+                browser.windows.onRemoved.removeListener(onRemoved);
+                resolve();
+              }
+            };
+            browser.windows.onRemoved.addListener(onRemoved);
+          });
+        });
+      }
+    } catch (e) {
+      console.error("[ThunderClerk-AI] Auto Analyze — contact extraction failed:", e.message);
+      notifyError("Contact error", e.message);
+    }
+  }
+
+  // --- Force overrides (single-extraction fallbacks) ---
+  if (selections.forceCalendar) {
+    try {
+      await handleCalendar(message, emailBody, settings);
+    } catch (e) {
+      console.error("[ThunderClerk-AI] Auto Analyze — force calendar failed:", e.message);
+      notifyError("Calendar error", e.message);
+    }
+  }
+
+  if (selections.forceTask) {
+    try {
+      await handleTask(message, emailBody, settings);
+    } catch (e) {
+      console.error("[ThunderClerk-AI] Auto Analyze — force task failed:", e.message);
+      notifyError("Task error", e.message);
+    }
+  }
+
+  if (selections.forceContact) {
+    try {
+      await handleExtractContact(message, emailBody, settings);
+    } catch (e) {
+      console.error("[ThunderClerk-AI] Auto Analyze — force contact failed:", e.message);
+      notifyError("Contact error", e.message);
+    }
+  }
+
+  // --- Reply ---
+  if (selections.reply) {
+    try {
+      await handleDraftReply(message, emailBody, settings);
+    } catch (e) {
+      console.error("[ThunderClerk-AI] Auto Analyze — reply failed:", e.message);
+      notifyError("Reply error", e.message);
+    }
+  }
+
+  // --- Summarize & Forward ---
+  if (selections.forward) {
+    try {
+      await handleSummarizeForward(message, emailBody, settings);
+    } catch (e) {
+      console.error("[ThunderClerk-AI] Auto Analyze — forward failed:", e.message);
+      notifyError("Forward error", e.message);
+    }
+  }
+
+  // --- Catalog ---
+  if (selections.catalog) {
+    try {
+      await catalogEmail(message, emailBody, settings);
+    } catch (e) {
+      console.error("[ThunderClerk-AI] Auto Analyze — catalog failed:", e.message);
+      notifyError("Catalog error", e.message);
+    }
+  }
+
+  // --- Archive / Delete (always last, mutually exclusive) ---
+  if (selections.archive) {
+    try {
+      await browser.messages.archive([message.id]);
+    } catch (e) {
+      console.error("[ThunderClerk-AI] Auto Analyze — archive failed:", e.message);
+      notifyError("Archive error", e.message);
+    }
+  } else if (selections.delete) {
+    try {
+      await browser.messages.delete([message.id], false);
+    } catch (e) {
+      console.error("[ThunderClerk-AI] Auto Analyze — delete failed:", e.message);
+      notifyError("Delete error", e.message);
+    }
+  }
+}
+
+// Try to salvage a truncated analysis JSON response.
+// LLMs sometimes produce valid JSON up to a point then stop mid-token.
+function repairAnalysisJSON(raw) {
+  if (!raw) return null;
+  const start = raw.indexOf("{");
+  if (start < 0) return null;
+
+  let text = raw.slice(start);
+
+  // Try parsing as-is first
+  try { return JSON.parse(text); } catch {}
+
+  // Strategy: scan backwards from the end, trying to find a truncation
+  // point we can close. Try many possible closing suffixes at each position.
+  const closers = [
+    "}", "]}", "]}", '"}', '"}]', '"}]}', '"]}', "]}",
+    "}]}", "]}]}", '"]}'  , '"}]}', '"}]]}',
+  ];
+
+  // First try: trim back to the last complete-looking JSON value boundary
+  // (comma, closing bracket/brace, or end of string)
+  for (let i = text.length; i > Math.max(0, text.length - 200); i--) {
+    const slice = text.slice(0, i);
+    // Try each closer
+    for (const suffix of closers) {
+      try { return JSON.parse(slice + suffix); } catch {}
+    }
+  }
+
+  return null;
+}
+
+async function handleAutoAnalyze(message, emailBody, settings) {
+  const host   = settings.ollamaHost  || DEFAULT_HOST;
+  const model  = settings.ollamaModel || DEFAULTS.ollamaModel;
+  const author = message.author || "";
+  const subject = message.subject || "";
+  const mailDatetime = formatDatetime(message.date);
+  const currentDt    = currentDatetime();
+
+  // Stage 1: get summary + detected item previews
+  // Use higher num_predict for analysis — reasoning/thinking models consume tokens
+  // on internal chain-of-thought before producing visible output, so the budget
+  // must cover both thinking and the JSON response.
+  // num_ctx: 16384 ensures the full prompt + generation fits in context (default
+  // is often 4096-8192 which overflows on long emails).
+  const MAX_ANALYSIS_BODY = 12000;
+  let analysisBody = emailBody;
+  if (analysisBody.length > MAX_ANALYSIS_BODY) {
+    analysisBody = analysisBody.slice(0, MAX_ANALYSIS_BODY) +
+      "\n\n[… email truncated — there may be additional items beyond this point]";
+  }
+  const prompt = buildAnalysisPrompt(analysisBody, subject, author, mailDatetime, currentDt);
+
+  if (settings && settings.debugPromptPreview) {
+    await previewPrompt(prompt);
+  }
+
+  const MAX_ANALYSIS_ATTEMPTS = 2;
+  let analysis = null;
+
+  for (let attempt = 1; attempt <= MAX_ANALYSIS_ATTEMPTS; attempt++) {
+    const actionLabel = attempt === 1
+      ? "analyze the email"
+      : `retry analysis (attempt ${attempt})`;
+    const progress = createProgressNotifier(actionLabel, model);
+    progress.start();
+
+    let rawResponse;
+    try {
+      rawResponse = await callOllama(host, model, prompt, { num_predict: 12288, num_ctx: 16384 });
+    } catch (e) {
+      progress.stop();
+      if (attempt === MAX_ANALYSIS_ATTEMPTS) throw e;
+      console.warn(`[ThunderClerk-AI] Analysis attempt ${attempt} failed:`, e.message);
+      continue;
+    }
+    progress.stop();
+
+    try {
+      const jsonStr = extractJSON(rawResponse);
+      analysis = JSON.parse(jsonStr);
+    } catch {
+      // LLM output may be truncated — try to repair
+      console.warn("[ThunderClerk-AI] Analysis raw response (first 2000 chars):", rawResponse?.substring(0, 2000));
+      console.warn("[ThunderClerk-AI] Analysis raw response (last 500 chars):", rawResponse?.slice(-500));
+      analysis = repairAnalysisJSON(rawResponse);
+      if (analysis) {
+        console.log("[ThunderClerk-AI] Repaired truncated analysis JSON — got", Object.keys(analysis).join(", "));
+      }
+    }
+
+    if (analysis) break;
+    console.warn(`[ThunderClerk-AI] Analysis attempt ${attempt} produced invalid JSON, retrying…`);
+  }
+
+  if (!analysis) {
+    throw new Error("invalid JSON in analysis response (all attempts failed)");
+  }
+
+  if (!analysis.summary) analysis.summary = subject;
+
+  // Normalize items — LLMs may return different key names for the preview
+  for (const key of ["events", "tasks", "contacts"]) {
+    if (Array.isArray(analysis[key])) {
+      analysis[key] = analysis[key].map(item => {
+        if (typeof item === "string") return { preview: item };
+        if (!item.preview) {
+          item.preview = item.title || item.name || item.description
+            || item.summary || item.label || "";
+        }
+        return item;
+      });
+    }
+  }
+
+  // Open dialog for user to select items
+  const selections = await openAnalyzeDialog(analysis);
+
+  if (!selections) return; // cancelled
+
+  // Stage 2: extract full data for selected items and execute
+  await executeAnalysisSelections(message, emailBody, settings, analysis, selections);
+}
+
 // --- Menu click handler ---
 
 browser.menus.onClicked.addListener(async (info, tab) => {
@@ -545,6 +975,7 @@ browser.menus.onClicked.addListener(async (info, tab) => {
 
   // Dispatch to the appropriate handler
   const isCatalog = info.menuItemId === "thunderclerk-ai-catalog-email";
+  const isAutoAnalyze = info.menuItemId === "thunderclerk-ai-auto-analyze";
   try {
     if (info.menuItemId === "thunderclerk-ai-add-calendar") {
       await handleCalendar(message, emailBody, settings);
@@ -558,14 +989,62 @@ browser.menus.onClicked.addListener(async (info, tab) => {
       await handleExtractContact(message, emailBody, settings);
     } else if (isCatalog) {
       await catalogEmail(message, emailBody, settings);
+    } else if (isAutoAnalyze) {
+      await handleAutoAnalyze(message, emailBody, settings);
     }
 
-    // Auto-tag after any non-catalog action (fire-and-forget)
-    if (!isCatalog && settings.autoTagAfterAction) {
+    // Auto-tag after any non-catalog, non-analyze action (fire-and-forget)
+    if (!isCatalog && !isAutoAnalyze && settings.autoTagAfterAction) {
       catalogEmail(message, emailBody, settings).catch(e =>
         console.warn("[ThunderClerk-AI] Auto-tag failed:", e.message)
       );
     }
+  } catch (e) {
+    if (e.message?.includes("invalid JSON") || e.message?.includes("No JSON object") || e.message?.includes("Unclosed JSON")) {
+      console.error("[ThunderClerk-AI] JSON parse failed:", e.message);
+      notifyError("Parse error", "Model returned invalid JSON. Check the browser console for details.");
+    } else {
+      notifyError("Error", e.message);
+    }
+  }
+});
+
+// --- Keyboard shortcut handler ---
+
+browser.commands.onCommand.addListener(async (command) => {
+  if (command !== "auto-analyze") return;
+
+  let message;
+  try {
+    const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+    if (!tabs || tabs.length === 0) return;
+    message = await browser.messageDisplay.getDisplayedMessage(tabs[0].id);
+  } catch {
+    // Not viewing a message
+  }
+
+  if (!message) {
+    notifyError("No message displayed", "Open or select a message first.");
+    return;
+  }
+
+  const settings = await browser.storage.sync.get(DEFAULTS);
+
+  let emailBody = "";
+  try {
+    const full = await browser.messages.getFull(message.id);
+    emailBody = extractTextBody(full);
+    if (!emailBody) {
+      notifyError("Empty body", "Could not extract plain text from this message.");
+      return;
+    }
+  } catch (e) {
+    notifyError("Message read error", e.message);
+    return;
+  }
+
+  try {
+    await handleAutoAnalyze(message, emailBody, settings);
   } catch (e) {
     if (e.message?.includes("invalid JSON") || e.message?.includes("No JSON object") || e.message?.includes("Unclosed JSON")) {
       console.error("[ThunderClerk-AI] JSON parse failed:", e.message);

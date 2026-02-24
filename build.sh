@@ -22,6 +22,10 @@ case "$ENV" in
     ;;
 esac
 
+# Run unit tests before building — fail fast on broken code
+echo "Running unit tests..."
+npm test || { echo "Unit tests failed — aborting build." >&2; exit 1; }
+
 cp "$CONFIG" config.js
 
 rm -f thunderclerk-ai.xpi
