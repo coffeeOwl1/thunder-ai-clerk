@@ -266,6 +266,32 @@ function applyCalendarDefaults(data) {
 
 // Extract the first complete JSON object from a string, handling
 // markdown fences and any preamble the model may emit.
+// Escape bare control characters (U+0000–U+001F) that appear inside JSON
+// string values.  LLMs sometimes emit literal newlines or tabs inside quoted
+// strings, which is invalid JSON.  We walk the extracted JSON text and only
+// replace control chars that fall between unescaped quote boundaries.
+function escapeJSONControlChars(json) {
+  let out = "";
+  let inString = false;
+  for (let i = 0; i < json.length; i++) {
+    const ch = json[i];
+    const code = json.charCodeAt(i);
+    if (inString) {
+      if (ch === '"') { inString = false; out += ch; continue; }
+      if (ch === "\\") { out += ch + (json[i + 1] || ""); i++; continue; }
+      if (code < 0x20) {
+        // Replace bare control char with its \uXXXX escape
+        out += "\\u" + code.toString(16).padStart(4, "0");
+        continue;
+      }
+    } else if (ch === '"') {
+      inString = true;
+    }
+    out += ch;
+  }
+  return out;
+}
+
 function extractJSON(text) {
   const fenced = text.replace(/^```(?:json)?\s*/im, "").replace(/\s*```\s*$/m, "").trim();
 
@@ -283,7 +309,7 @@ function extractJSON(text) {
   }
   if (end === -1) throw new Error("Unclosed JSON object in model output");
 
-  return fenced.slice(start, end + 1);
+  return escapeJSONControlChars(fenced.slice(start, end + 1));
 }
 
 // Extract the first JSON object or array from a string.
@@ -314,7 +340,7 @@ function extractJSONOrArray(text) {
   }
   if (end === -1) throw new Error("Unclosed JSON array in model output");
 
-  return fenced.slice(arrStart, end + 1);
+  return escapeJSONControlChars(fenced.slice(arrStart, end + 1));
 }
 
 // Build the attendee addresses to hint to the AI based on user's setting.
@@ -607,7 +633,7 @@ Rules:
 - Only include items that are clearly present. Omit empty arrays.
 - Each preview should be a short human-readable string (e.g. "Team Meeting — Mar 5, 2pm-3pm").
 - Include the year in previews when dates span multiple years or differ from the email's year.
-- The summary should be 1-3 sentences describing the email's purpose.
+- The summary should scale with the email's complexity: 5-10 sentences for long or multi-topic emails, 2-3 sentences for short simple ones. Cover the key points, decisions needed, and any deadlines.
 - List ALL items found. Do not skip any events, tasks, or contacts.
 - For relative dates (e.g. "next Tuesday"), resolve them relative to the email's sent date (${mailDatetime}).
 - Preserve the original dates from the email — do NOT change years to match today's date (${currentDt}).
@@ -805,6 +831,7 @@ if (typeof module !== "undefined") {
     applyCalendarDefaults,
     extractJSON,
     extractJSONOrArray,
+    escapeJSONControlChars,
     buildAttendeesHint,
     buildDescription,
     buildCategoryInstruction,

@@ -7,6 +7,7 @@ const {
   applyCalendarDefaults,
   extractJSON,
   extractJSONOrArray,
+  escapeJSONControlChars,
   buildAttendeesHint,
   buildDescription,
   buildCategoryInstruction,
@@ -225,6 +226,72 @@ describe("extractJSON", () => {
     const obj = { summary: "Test", startDate: "20260301T090000", forceAllDay: false };
     const raw = JSON.stringify(obj);
     expect(JSON.parse(extractJSON(raw))).toEqual(obj);
+  });
+
+  test("escapes bare newlines inside string values", () => {
+    const raw = '{"summary":"line one\nline two"}';
+    const result = extractJSON(raw);
+    expect(() => JSON.parse(result)).not.toThrow();
+    expect(JSON.parse(result).summary).toBe("line one\nline two");
+  });
+
+  test("escapes bare tabs inside string values", () => {
+    const raw = '{"body":"col1\tcol2"}';
+    const result = extractJSON(raw);
+    expect(() => JSON.parse(result)).not.toThrow();
+    expect(JSON.parse(result).body).toBe("col1\tcol2");
+  });
+
+  test("preserves already-escaped sequences", () => {
+    const raw = '{"body":"line\\nnext"}';
+    const result = extractJSON(raw);
+    expect(JSON.parse(result).body).toBe("line\nnext");
+  });
+
+  test("escapes carriage return + newline", () => {
+    const raw = '{"body":"hello\r\nworld"}';
+    const result = extractJSON(raw);
+    expect(() => JSON.parse(result)).not.toThrow();
+    expect(JSON.parse(result).body).toBe("hello\r\nworld");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// escapeJSONControlChars
+// ---------------------------------------------------------------------------
+describe("escapeJSONControlChars", () => {
+  test("escapes bare newline inside string", () => {
+    const input = '{"a":"x\ny"}';
+    const result = escapeJSONControlChars(input);
+    expect(JSON.parse(result)).toEqual({ a: "x\ny" });
+  });
+
+  test("does not alter control chars outside strings", () => {
+    // Newline between key-value pairs (valid JSON whitespace)
+    const input = '{"a":1,\n"b":2}';
+    expect(escapeJSONControlChars(input)).toBe(input);
+  });
+
+  test("preserves already-escaped \\n", () => {
+    const input = '{"a":"x\\ny"}';
+    expect(escapeJSONControlChars(input)).toBe(input);
+  });
+
+  test("handles escaped quote inside string", () => {
+    const input = '{"a":"say \\"hi\\""}';
+    expect(escapeJSONControlChars(input)).toBe(input);
+    expect(JSON.parse(escapeJSONControlChars(input)).a).toBe('say "hi"');
+  });
+
+  test("escapes multiple control chars", () => {
+    const input = '{"a":"1\t2\n3"}';
+    const result = escapeJSONControlChars(input);
+    expect(JSON.parse(result)).toEqual({ a: "1\t2\n3" });
+  });
+
+  test("handles empty strings", () => {
+    const input = '{"a":""}';
+    expect(escapeJSONControlChars(input)).toBe(input);
   });
 });
 
@@ -1118,6 +1185,13 @@ describe("extractJSONOrArray", () => {
     const arr = [{ summary: "A" }, { summary: "B" }];
     const raw = JSON.stringify(arr);
     expect(JSON.parse(extractJSONOrArray(raw))).toEqual(arr);
+  });
+
+  test("escapes bare newlines inside array string values", () => {
+    const raw = '[{"body":"line1\nline2"}]';
+    const result = extractJSONOrArray(raw);
+    expect(() => JSON.parse(result)).not.toThrow();
+    expect(JSON.parse(result)[0].body).toBe("line1\nline2");
   });
 });
 
