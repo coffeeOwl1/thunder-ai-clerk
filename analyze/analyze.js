@@ -192,11 +192,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     window.close();
   });
 
-  document.getElementById("cancel-btn").addEventListener("click", async () => {
-    await browser.runtime.sendMessage({ analyzeAction: "cancel" });
-    window.close();
-  });
-
   // Signal background to start batch pre-extractions
   browser.runtime.sendMessage({ analyzeAction: "dialogReady" }).catch(() => {});
 });

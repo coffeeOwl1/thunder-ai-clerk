@@ -2,6 +2,11 @@
 
 // DEFAULTS is defined in config.js, loaded before this script.
 
+// --- Model size + info caches ---
+
+const modelSizeMap = {};    // modelName → file size in bytes
+let modelInfoCache = {};    // modelName → { blockCount, headCount, headCountKv, embeddingLength }
+
 // --- Model list from Ollama ---
 
 async function populateModels(selectEl, savedModel) {
@@ -14,6 +19,10 @@ async function populateModels(selectEl, savedModel) {
     const resp = await fetch(host.replace(/\/$/, "") + "/api/tags");
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
+    // Capture model sizes for VRAM estimation
+    for (const m of (data.models || [])) {
+      if (m.name && m.size) modelSizeMap[m.name] = m.size;
+    }
     models = (data.models || []).map(m => m.name).sort();
   } catch (e) {
     console.error("[ThunderClerk-AI] Could not fetch models:", e);
@@ -136,6 +145,130 @@ function syncAttendeesUI(source) {
     source === "static" ? "block" : "none";
 }
 
+// --- VRAM estimation ---
+
+function formatBytes(bytes) {
+  if (bytes >= 1024 ** 3) return (bytes / 1024 ** 3).toFixed(1) + " GB";
+  if (bytes >= 1024 ** 2) return (bytes / 1024 ** 2).toFixed(0) + " MB";
+  return (bytes / 1024).toFixed(0) + " KB";
+}
+
+async function fetchModelInfo(host, modelName) {
+  if (!modelName) return null;
+  if (modelInfoCache[modelName]) return modelInfoCache[modelName];
+
+  try {
+    const resp = await fetch(host.replace(/\/$/, "") + "/api/show", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: modelName }),
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    const arch = data.model_info || {};
+
+    // Architecture keys use a prefix like "llama." or "qwen2."
+    // Find them by suffix matching
+    let blockCount = 0, headCount = 0, headCountKv = 0, embeddingLength = 0;
+    let contextLength = 0;
+    for (const [key, val] of Object.entries(arch)) {
+      if (key.endsWith(".block_count")) blockCount = val;
+      else if (key.endsWith(".attention.head_count")) headCount = val;
+      else if (key.endsWith(".attention.head_count_kv")) headCountKv = val;
+      else if (key.endsWith(".embedding_length")) embeddingLength = val;
+      else if (key.endsWith(".context_length")) contextLength = val;
+    }
+
+    // Detect thinking/reasoning models by checking for .Think in the template
+    const template = data.template || "";
+    const isThinkingModel = template.includes(".Think");
+
+    const info = { blockCount, headCount, headCountKv, embeddingLength, contextLength, isThinkingModel };
+    modelInfoCache[modelName] = info;
+    return info;
+  } catch {
+    return null;
+  }
+}
+
+function formatCtxLabel(tokens) {
+  return tokens >= 1024 ? (tokens / 1024) + "K" : String(tokens);
+}
+
+async function updateVramEstimate() {
+  const estimateEl = document.getElementById("vram-estimate");
+  const totalEl = document.getElementById("vram-total");
+  const breakdownEl = document.getElementById("vram-breakdown");
+  const recEl = document.getElementById("llm-recommendation");
+  const ctxSelect = document.getElementById("numCtx");
+  const predictSelect = document.getElementById("numPredict");
+
+  const modelName = document.getElementById("ollamaModel").value;
+  const numCtxVal = parseInt(ctxSelect.value, 10) || 0;
+  const numPredictVal = parseInt(predictSelect.value, 10) || 0;
+
+  if (!modelName || !modelSizeMap[modelName]) {
+    estimateEl.style.display = "none";
+    recEl.style.display = "none";
+    return;
+  }
+
+  const host = document.getElementById("ollamaHost").value.trim() || DEFAULTS.ollamaHost;
+  const modelInfo = await fetchModelInfo(host, modelName);
+
+  // Update "Model default" option text with actual context length
+  const defaultOpt = ctxSelect.options[0];
+  if (modelInfo && modelInfo.contextLength) {
+    defaultOpt.textContent = "Model default (" + formatCtxLabel(modelInfo.contextLength) + ")";
+  } else {
+    defaultOpt.textContent = "Model default";
+  }
+
+  if (!modelInfo || !modelInfo.blockCount) {
+    totalEl.textContent = "VRAM estimate unavailable — cannot reach Ollama";
+    breakdownEl.textContent = "";
+    estimateEl.style.display = "block";
+    recEl.style.display = "none";
+    return;
+  }
+
+  // Use actual model default when "Model default" is selected
+  const effectiveCtx = numCtxVal || modelInfo.contextLength || 0;
+  const result = estimateVRAM(modelInfo, modelSizeMap[modelName], effectiveCtx);
+
+  totalEl.textContent = "Estimated VRAM usage: ~" + formatBytes(result.total);
+  const parts = ["Model: ~" + formatBytes(result.weights)];
+  if (result.kvCache > 0) {
+    parts.push("Context window: ~" + formatBytes(result.kvCache));
+  }
+  breakdownEl.textContent = parts.join(" | ") + " (based on model size and context window)";
+  estimateEl.style.display = "block";
+
+  // Build recommendation based on model + settings
+  const autoAnalyze = document.getElementById("autoAnalyzeEnabled").checked;
+  const recommendations = [];
+
+  if (modelInfo.isThinkingModel && (numPredictVal > 0 && numPredictVal < 8192)) {
+    recommendations.push("This is a thinking model — it needs at least 8K output tokens to work reliably.");
+  }
+
+  if (autoAnalyze) {
+    if (numCtxVal > 0 && numCtxVal < 16384) {
+      recommendations.push("Auto Analyze works best with a 16K+ context window.");
+    }
+    if (numPredictVal > 0 && numPredictVal < 8192) {
+      recommendations.push("Auto Analyze works best with 8K+ output tokens (12K for thinking models).");
+    }
+  }
+
+  if (recommendations.length > 0) {
+    recEl.textContent = recommendations.join(" ");
+    recEl.style.display = "block";
+  } else {
+    recEl.style.display = "none";
+  }
+}
+
 // --- Restore all settings on load ---
 
 async function restoreOptions() {
@@ -154,6 +287,8 @@ async function restoreOptions() {
   document.getElementById("allowNewTags").checked            = !!s.allowNewTags;
   document.getElementById("autoAnalyzeEnabled").checked      = !!s.autoAnalyzeEnabled;
   document.getElementById("debugPromptPreview").checked     = !!s.debugPromptPreview;
+  document.getElementById("numCtx").value        = String(s.numCtx || 0);
+  document.getElementById("numPredict").value    = String(s.numPredict || 0);
 
   syncAttendeesUI(s.attendeesSource);
 
@@ -163,6 +298,9 @@ async function restoreOptions() {
     populateCalendars(document.getElementById("defaultCalendar"), s.defaultCalendar),
     populateAddressBooks(document.getElementById("contactAddressBook"), s.contactAddressBook),
   ]);
+
+  // Update VRAM estimate after models are loaded
+  updateVramEstimate();
 }
 
 // --- Save all settings at once ---
@@ -209,6 +347,8 @@ async function saveOptions() {
     autoTagAfterAction:    document.getElementById("autoTagAfterAction").checked,
     allowNewTags:          document.getElementById("allowNewTags").checked,
     autoAnalyzeEnabled:    document.getElementById("autoAnalyzeEnabled").checked,
+    numCtx:                Number(document.getElementById("numCtx").value) || 0,
+    numPredict:            Number(document.getElementById("numPredict").value) || 0,
     debugPromptPreview:    document.getElementById("debugPromptPreview").checked,
   };
 
@@ -243,7 +383,25 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.getElementById("refresh-models").addEventListener("click", async () => {
     const sel = document.getElementById("ollamaModel");
+    modelInfoCache = {};
     await populateModels(sel, sel.value);
+    updateVramEstimate();
+  });
+
+  document.getElementById("ollamaModel").addEventListener("change", () => {
+    updateVramEstimate();
+  });
+
+  document.getElementById("numCtx").addEventListener("change", () => {
+    updateVramEstimate();
+  });
+
+  document.getElementById("numPredict").addEventListener("change", () => {
+    updateVramEstimate();
+  });
+
+  document.getElementById("autoAnalyzeEnabled").addEventListener("change", () => {
+    updateVramEstimate();
   });
 
   document.getElementById("refresh-calendars").addEventListener("click", async () => {

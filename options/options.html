@@ -83,6 +83,40 @@
     <strong>Minimum recommended model:</strong> <code>mistral:7b</code> or any comparable 7B general-instruction model. Smaller models tend to produce less reliable results. Larger or more capable models will generally perform better.
   </div>
 
+  <!-- LLM Parameters -->
+  <h3>LLM Parameters</h3>
+
+  <label for="numCtx">Context Window</label>
+  <select id="numCtx">
+    <option value="0">Model default</option>
+    <option value="2048">2K — minimal (saves VRAM)</option>
+    <option value="4096">4K</option>
+    <option value="8192">8K</option>
+    <option value="16384">16K — recommended for Auto Analyze</option>
+    <option value="32768">32K</option>
+    <option value="65536">64K</option>
+    <option value="131072">128K</option>
+  </select>
+  <div class="hint">How much text the model can process at once. Larger values use more VRAM.</div>
+
+  <div id="vram-estimate" style="display:none; margin-top:10px; padding:8px 10px; background:#f0f4ff; border:1px solid #c5d0f0; border-radius:4px; font-size:12px; color:#333; line-height:1.6;">
+    <strong id="vram-total"></strong><br>
+    <span style="font-size:11px; color:#555;" id="vram-breakdown"></span>
+  </div>
+
+  <label for="numPredict">Max Output Tokens</label>
+  <select id="numPredict">
+    <option value="0">Model default</option>
+    <option value="1024">1K — short responses</option>
+    <option value="2048">2K</option>
+    <option value="4096">4K — standard</option>
+    <option value="8192">8K — thinking models (DeepSeek, QwQ, etc.)</option>
+    <option value="12288">12K — thinking models + Auto Analyze</option>
+  </select>
+  <div class="hint">Maximum length of each AI response. Some models (like DeepSeek, QwQ) think before answering and need more room.</div>
+
+  <div id="llm-recommendation" style="display:none; margin-top:8px; padding:7px 10px; background:#fff8e1; border:1px solid #f0c040; border-radius:4px; font-size:11px; color:#7a5d00; line-height:1.5;"></div>
+
   <!-- Calendar event defaults -->
   <h3>Calendar Events</h3>
 
@@ -218,6 +252,7 @@
   <div id="status"></div>
 
   <script src="../config.js"></script>
+  <script src="../utils.js"></script>
   <script src="options.js"></script>
 </body>
 </html>

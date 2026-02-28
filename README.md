@@ -59,6 +59,8 @@ After installation the Settings page opens automatically. You can also reach it 
 | Auto-select category | Off | Ask the AI to pick the best category for events/tasks |
 | Auto-tag after actions | On | Automatically tag emails after using other actions |
 | Allow new tags | Off | Let the AI create new tags (experimental — may clutter your tag list) |
+| Context Window (tokens) | 0 (model default) | Override the model's context window size. Controls KV cache VRAM usage. |
+| Max Output Tokens | 0 (model default) | Override the maximum generation length. Thinking/reasoning models need 8192+. |
 | Enable Auto Analyze | Off | Show the Auto Analyze menu item and keyboard shortcut. Requires a 20B+ parameter model with at least 16 GB VRAM. Smaller models produce unreliable results. |
 
 ## Keyboard Shortcuts
@@ -112,7 +114,19 @@ cp config.test.js.example config.test.js
 
 Environment variables (`OLLAMA_HOST`, `OLLAMA_MODEL`) override the config file.
 
-### Building
+### Live development (no .xpi needed)
+
+For fast iteration, load the extension directly from source instead of rebuilding the .xpi every time:
+
+1. Run `./build.sh dev` once to copy your dev config into place
+2. In Thunderbird: **Add-ons Manager → gear icon (⚙) → Debug Add-ons**
+3. Click **Load Temporary Add-on** and select `manifest.json` from the project directory
+4. After editing source files, click **Reload** next to the extension on the Debug Add-ons page
+
+The temporary add-on persists until you close Thunderbird. If JavaScript
+changes aren't reflected, restart Thunderbird with `thunderbird -purgecaches`.
+
+### Building the .xpi
 
 A build script handles config selection and packaging:
 

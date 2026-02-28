@@ -6,6 +6,26 @@ const DEFAULT_HOST = "http://127.0.0.1:11434";
 
 // DEFAULTS is defined in config.js, loaded before this script.
 
+// --- LLM parameter helpers ---
+
+// Build Ollama options from user settings. Omits keys whose value is 0 (model default).
+function buildOllamaOptions(settings) {
+  const opts = {};
+  if (settings.numCtx)     opts.num_ctx     = settings.numCtx;
+  if (settings.numPredict) opts.num_predict = settings.numPredict;
+  return opts;
+}
+
+// Build Ollama options for Auto Analyze calls. User settings can raise
+// above the hardcoded minimums but never lower below them — Auto Analyze
+// needs generous token budgets to function reliably.
+function autoAnalyzeOpts(settings, minCtx, minPredict) {
+  return {
+    num_ctx:     Math.max(settings.numCtx || 0, minCtx),
+    num_predict: Math.max(settings.numPredict || 0, minPredict),
+  };
+}
+
 // --- First-run onboarding ---
 
 browser.runtime.onInstalled.addListener(async (details) => {
@@ -337,7 +357,7 @@ async function handleCalendar(message, emailBody, settings) {
   const wantAiDescription = descriptionFormat === "ai_summary";
   const prompt = buildCalendarPrompt(emailBody, subject, mailDatetime, currentDt, attendeeHints, categories, wantAiDescription);
 
-  const parsed = await callOllamaWithNotification(host, model, prompt, "extract event details", settings);
+  const parsed = await callOllamaWithNotification(host, model, prompt, "extract event details", settings, buildOllamaOptions(settings));
 
   applyEventSettings(parsed, message, emailBody, settings);
 
@@ -366,7 +386,7 @@ async function handleTask(message, emailBody, settings) {
   const wantAiDescription = taskDescriptionFormat === "ai_summary";
   const prompt = buildTaskPrompt(emailBody, subject, mailDatetime, currentDt, categories, wantAiDescription);
 
-  const parsed = await callOllamaWithNotification(host, model, prompt, "extract task details", settings);
+  const parsed = await callOllamaWithNotification(host, model, prompt, "extract task details", settings, buildOllamaOptions(settings));
 
   applyTaskSettings(parsed, message, emailBody, settings);
 
@@ -380,7 +400,7 @@ async function handleDraftReply(message, emailBody, settings) {
   const subject = message.subject || "";
 
   const prompt = buildDraftReplyPrompt(emailBody, subject, author);
-  const parsed = await callOllamaWithNotification(host, model, prompt, "draft a reply", settings);
+  const parsed = await callOllamaWithNotification(host, model, prompt, "draft a reply", settings, buildOllamaOptions(settings));
 
   const replyBody = (parsed.body || "").trim();
   if (!replyBody) {
@@ -398,7 +418,7 @@ async function handleSummarizeForward(message, emailBody, settings) {
   const subject = message.subject || "";
 
   const prompt = buildSummarizeForwardPrompt(emailBody, subject, author);
-  const parsed = await callOllamaWithNotification(host, model, prompt, "summarize the email", settings);
+  const parsed = await callOllamaWithNotification(host, model, prompt, "summarize the email", settings, buildOllamaOptions(settings));
 
   const summary = (parsed.summary || "").trim();
   if (!summary) {
@@ -428,7 +448,7 @@ async function handleExtractContact(message, emailBody, settings) {
   const subject = message.subject || "";
 
   const prompt = buildContactPrompt(emailBody, subject, author);
-  const parsed = await callOllamaWithNotification(host, model, prompt, "extract contact info", settings);
+  const parsed = await callOllamaWithNotification(host, model, prompt, "extract contact info", settings, buildOllamaOptions(settings));
 
   // Store extracted contact for the review popup to read
   await browser.storage.local.set({
@@ -472,7 +492,7 @@ async function catalogEmail(message, emailBody, settings) {
   const existingTagNames = existingTags.map(t => t.tag);
 
   const prompt = buildCatalogPrompt(emailBody, subject, author, existingTagNames);
-  const parsed = await callOllamaWithNotification(host, model, prompt, "catalog email", settings);
+  const parsed = await callOllamaWithNotification(host, model, prompt, "catalog email", settings, buildOllamaOptions(settings));
 
   const aiTags = parsed.tags;
   if (!Array.isArray(aiTags) || aiTags.length === 0) {
@@ -630,7 +650,7 @@ async function processSingleItem(group, index, message, emailBody, settings, ana
       emailBody, subject, mailDatetime, currentDt, attendeeHints,
       categories, wantAiDescription, analysis.events, [index]
     );
-    const parsed = await callOllamaWithNotification(host, model, prompt, "extract event details", settings);
+    const parsed = await callOllamaWithNotification(host, model, prompt, "extract event details", settings, buildOllamaOptions(settings));
     const events = parsed.events || [parsed];
     for (const evt of events) {
       applyEventSettings(evt, message, emailBody, settings);
@@ -648,7 +668,7 @@ async function processSingleItem(group, index, message, emailBody, settings, ana
       emailBody, subject, mailDatetime, currentDt,
       categories, wantAiDescription, analysis.tasks, [index]
     );
-    const parsed = await callOllamaWithNotification(host, model, prompt, "extract task details", settings);
+    const parsed = await callOllamaWithNotification(host, model, prompt, "extract task details", settings, buildOllamaOptions(settings));
     const tasks = parsed.tasks || [parsed];
     for (const task of tasks) {
       applyTaskSettings(task, message, emailBody, settings);
@@ -658,7 +678,7 @@ async function processSingleItem(group, index, message, emailBody, settings, ana
     const prompt = buildContactArrayPrompt(
       emailBody, subject, author, analysis.contacts, [index]
     );
-    const parsed = await callOllamaWithNotification(host, model, prompt, "extract contact info", settings);
+    const parsed = await callOllamaWithNotification(host, model, prompt, "extract contact info", settings, buildOllamaOptions(settings));
     const contacts = parsed.contacts || [parsed];
     for (const contact of contacts) {
       await browser.storage.local.set({
@@ -821,7 +841,7 @@ async function runBatchExtractions(analysis, message, emailBody, settings, cache
           emailBody, subject, mailDatetime, currentDt, attendeeHints,
           categories, wantAiDescription, analysis.events, allIndices
         );
-        const raw = await callOllama(host, model, prompt, { num_predict: 12288, num_ctx: 16384 });
+        const raw = await callOllama(host, model, prompt, autoAnalyzeOpts(settings, 16384, 12288));
         const jsonStr = extractJSON(raw);
         const parsed = JSON.parse(jsonStr);
         const events = parsed.events || [parsed];
@@ -851,7 +871,7 @@ async function runBatchExtractions(analysis, message, emailBody, settings, cache
           emailBody, subject, mailDatetime, currentDt,
           categories, wantAiDescription, analysis.tasks, allIndices
         );
-        const raw = await callOllama(host, model, prompt, { num_predict: 12288, num_ctx: 16384 });
+        const raw = await callOllama(host, model, prompt, autoAnalyzeOpts(settings, 16384, 12288));
         const jsonStr = extractJSON(raw);
         const parsed = JSON.parse(jsonStr);
         const tasks = parsed.tasks || [parsed];
@@ -874,7 +894,7 @@ async function runBatchExtractions(analysis, message, emailBody, settings, cache
         const prompt = buildContactArrayPrompt(
           emailBody, subject, author, analysis.contacts, allIndices
         );
-        const raw = await callOllama(host, model, prompt, { num_predict: 4096, num_ctx: 8192 });
+        const raw = await callOllama(host, model, prompt, autoAnalyzeOpts(settings, 8192, 4096));
         const jsonStr = extractJSON(raw);
         const parsed = JSON.parse(jsonStr);
         const contacts = parsed.contacts || [parsed];
@@ -903,7 +923,7 @@ async function runBatchExtractions(analysis, message, emailBody, settings, cache
       }
       const wantAiDescription = (settings.descriptionFormat || "body_from_subject") === "ai_summary";
       const prompt = buildCalendarPrompt(emailBody, subject, mailDatetime, currentDt, attendeeHints, categories, wantAiDescription);
-      const raw = await callOllama(host, model, prompt, { num_predict: 4096, num_ctx: 8192 });
+      const raw = await callOllama(host, model, prompt, autoAnalyzeOpts(settings, 8192, 4096));
       const jsonStr = extractJSON(raw);
       const parsed = JSON.parse(jsonStr);
       applyEventSettings(parsed, message, emailBody, settings);
@@ -927,7 +947,7 @@ async function runBatchExtractions(analysis, message, emailBody, settings, cache
       const taskDescriptionFormat = settings.taskDescriptionFormat || "body_from_subject";
       const wantAiDescription = taskDescriptionFormat === "ai_summary";
       const prompt = buildTaskPrompt(emailBody, subject, mailDatetime, currentDt, categories, wantAiDescription);
-      const raw = await callOllama(host, model, prompt, { num_predict: 4096, num_ctx: 8192 });
+      const raw = await callOllama(host, model, prompt, autoAnalyzeOpts(settings, 8192, 4096));
       const jsonStr = extractJSON(raw);
       const parsed = JSON.parse(jsonStr);
       applyTaskSettings(parsed, message, emailBody, settings);
@@ -944,7 +964,7 @@ async function runBatchExtractions(analysis, message, emailBody, settings, cache
   jobs.push((async () => {
     try {
       const prompt = buildContactPrompt(emailBody, subject, author);
-      const raw = await callOllama(host, model, prompt, { num_predict: 4096, num_ctx: 8192 });
+      const raw = await callOllama(host, model, prompt, autoAnalyzeOpts(settings, 8192, 4096));
       const jsonStr = extractJSON(raw);
       const parsed = JSON.parse(jsonStr);
       cache.quickContact = { data: parsed, error: null };
@@ -960,7 +980,7 @@ async function runBatchExtractions(analysis, message, emailBody, settings, cache
   jobs.push((async () => {
     try {
       const prompt = buildSummarizeForwardPrompt(emailBody, subject, author);
-      const raw = await callOllama(host, model, prompt, { num_predict: 4096, num_ctx: 8192 });
+      const raw = await callOllama(host, model, prompt, autoAnalyzeOpts(settings, 8192, 4096));
       const jsonStr = extractJSON(raw);
       const parsed = JSON.parse(jsonStr);
       const summary = (parsed.summary || "").trim();
@@ -979,7 +999,7 @@ async function runBatchExtractions(analysis, message, emailBody, settings, cache
       const existingTags = await browser.messages.tags.list();
       const existingTagNames = existingTags.map(t => t.tag);
       const prompt = buildCatalogPrompt(emailBody, subject, author, existingTagNames);
-      const raw = await callOllama(host, model, prompt, { num_predict: 2048, num_ctx: 8192 });
+      const raw = await callOllama(host, model, prompt, autoAnalyzeOpts(settings, 8192, 2048));
       const jsonStr = extractJSON(raw);
       const parsed = JSON.parse(jsonStr);
       cache.quickCatalog = { data: { aiTags: parsed.tags, existingTags }, error: null };
@@ -1028,7 +1048,7 @@ async function handleAutoAnalyze(message, emailBody, settings) {
 
       let rawResponse;
       try {
-        rawResponse = await callOllama(host, model, analysisPrompt, { num_predict: 12288, num_ctx: 16384 });
+        rawResponse = await callOllama(host, model, analysisPrompt, autoAnalyzeOpts(settings, 16384, 12288));
       } catch (e) {
         progress.stop();
         if (attempt === MAX_ANALYSIS_ATTEMPTS) throw e;
@@ -1058,7 +1078,7 @@ async function handleAutoAnalyze(message, emailBody, settings) {
 
   const replyTask = (async () => {
     try {
-      const rawReply = await callOllama(host, model, replyPrompt, { num_predict: 4096, num_ctx: 8192 });
+      const rawReply = await callOllama(host, model, replyPrompt, autoAnalyzeOpts(settings, 8192, 4096));
       const jsonStr = extractJSON(rawReply);
       const parsed = JSON.parse(jsonStr);
       return (parsed.body || "").trim() || null;

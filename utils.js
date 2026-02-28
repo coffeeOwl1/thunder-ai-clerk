@@ -489,13 +489,18 @@ function buildDraftReplyPrompt(emailBody, subject, author) {
   const safeSubject = sanitizeForPrompt(subject);
   const safeAuthor = sanitizeForPrompt(author);
 
-  return `Draft a professional reply to the following email. Match the tone of the original — formal if the email is formal, casual if casual.
+  return `Draft a reply to the following email that the user can review and edit before sending. Match the tone of the original — formal if formal, casual if casual.
 
 Rules:
 - Do NOT include a greeting (e.g. "Hi Name,") or sign-off (e.g. "Best regards") — the email client handles those.
 - Write plain text only, no HTML or markdown.
-- Keep the reply concise and relevant to the email content.
-- If the email asks questions, answer them. If it's informational, acknowledge it appropriately.
+- Write a warm, engaged reply — sound like someone who is happy to be in the conversation. Aim for a natural paragraph or two, not a one-liner.
+- Acknowledge what the sender said before responding to it. Show you read and understood their message.
+- You are drafting on behalf of the recipient, not the sender. Write from the recipient's perspective.
+- For questions you cannot answer (anything about the recipient's schedule, preferences, or decisions), insert a short bracketed placeholder like [your availability] or [yes/no] so the user can fill it in.
+- For invitations or event RSVPs, draft an enthusiastic acceptance.
+- For informational emails (newsletters, notifications, receipts), write a friendly acknowledgment — not just "Thanks."
+- Do NOT make up facts, commitments, or specific details about the recipient.
 
 Respond with JSON only — no explanation, no markdown fences. Use this structure:
 {
@@ -820,6 +825,33 @@ ${safeBody}
 Remember: extract only contact information from the email above. Respond with the specified JSON structure only.`;
 }
 
+// Estimate total VRAM usage for a model given architecture info and context size.
+//
+// modelInfo: { blockCount, headCount, headCountKv, embeddingLength }
+// modelSizeBytes: file size in bytes (approximates weight memory)
+// numCtx: context window size in tokens
+//
+// Returns { weights, kvCache, overhead, total } in bytes.
+function estimateVRAM(modelInfo, modelSizeBytes, numCtx) {
+  const overhead = 300 * 1024 * 1024; // 300 MB fixed overhead
+  const weights = modelSizeBytes || 0;
+
+  let kvCache = 0;
+  if (modelInfo && modelInfo.blockCount && modelInfo.headCountKv &&
+      modelInfo.embeddingLength && modelInfo.headCount && numCtx) {
+    const headDim = modelInfo.embeddingLength / modelInfo.headCount;
+    // KV cache = 2 (K+V) × layers × kv_heads × head_dim × 2 bytes (FP16) × ctx
+    kvCache = 2 * modelInfo.blockCount * modelInfo.headCountKv * headDim * 2 * numCtx;
+  }
+
+  return {
+    weights,
+    kvCache,
+    overhead,
+    total: weights + kvCache + overhead,
+  };
+}
+
 // Node.js export (used by Jest tests). Browser environment ignores this block.
 if (typeof module !== "undefined") {
   module.exports = {
@@ -848,5 +880,6 @@ if (typeof module !== "undefined") {
     isValidHostUrl,
     formatDatetime,
     currentDatetime,
+    estimateVRAM,
   };
 }

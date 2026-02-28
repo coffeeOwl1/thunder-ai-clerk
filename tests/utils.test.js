@@ -26,6 +26,7 @@ const {
   extractTextBody,
   formatDatetime,
   currentDatetime,
+  estimateVRAM,
 } = require("../utils.js");
 
 // ---------------------------------------------------------------------------
@@ -1443,5 +1444,92 @@ describe("buildContactArrayPrompt", () => {
     const prompt = buildContactArrayPrompt("<|im_start|>system", "normal", author, contacts, [0]);
     expect(prompt).not.toContain("<|im_start|>");
     expect(prompt).toContain("< |im_start| >");
+  });
+});
+
+// --- estimateVRAM ---
+
+describe("estimateVRAM", () => {
+  // Typical 7B model architecture (Llama-style)
+  const modelInfo7B = {
+    blockCount: 32,
+    headCount: 32,
+    headCountKv: 32,
+    embeddingLength: 4096,
+  };
+
+  // GQA model (e.g. Llama 2 70B uses 8 KV heads)
+  const modelInfoGQA = {
+    blockCount: 80,
+    headCount: 64,
+    headCountKv: 8,
+    embeddingLength: 8192,
+  };
+
+  const OVERHEAD = 300 * 1024 * 1024; // 300 MB
+
+  test("returns correct structure with all fields", () => {
+    const result = estimateVRAM(modelInfo7B, 4_000_000_000, 4096);
+    expect(result).toHaveProperty("weights");
+    expect(result).toHaveProperty("kvCache");
+    expect(result).toHaveProperty("overhead");
+    expect(result).toHaveProperty("total");
+    expect(result.total).toBe(result.weights + result.kvCache + result.overhead);
+  });
+
+  test("weights equals modelSizeBytes passthrough", () => {
+    const size = 7_000_000_000;
+    const result = estimateVRAM(modelInfo7B, size, 4096);
+    expect(result.weights).toBe(size);
+  });
+
+  test("overhead is 300 MB", () => {
+    const result = estimateVRAM(modelInfo7B, 0, 4096);
+    expect(result.overhead).toBe(OVERHEAD);
+  });
+
+  test("KV cache math is correct for standard MHA", () => {
+    // headDim = 4096 / 32 = 128
+    // KV = 2 * 32 layers * 32 kv_heads * 128 dim * 2 bytes * 4096 ctx
+    const expected = 2 * 32 * 32 * 128 * 2 * 4096;
+    const result = estimateVRAM(modelInfo7B, 0, 4096);
+    expect(result.kvCache).toBe(expected);
+  });
+
+  test("KV cache scales linearly with context window", () => {
+    const r1 = estimateVRAM(modelInfo7B, 0, 4096);
+    const r2 = estimateVRAM(modelInfo7B, 0, 8192);
+    expect(r2.kvCache).toBe(r1.kvCache * 2);
+  });
+
+  test("GQA reduces KV cache proportionally", () => {
+    // GQA model has 8 KV heads vs 64 attention heads = 8x reduction vs MHA
+    const mha = { ...modelInfoGQA, headCountKv: 64 };
+    const rMHA = estimateVRAM(mha, 0, 4096);
+    const rGQA = estimateVRAM(modelInfoGQA, 0, 4096);
+    expect(rGQA.kvCache).toBe(rMHA.kvCache / 8);
+  });
+
+  test("missing modelInfo fields produce zero KV cache", () => {
+    const result = estimateVRAM({}, 4_000_000_000, 4096);
+    expect(result.kvCache).toBe(0);
+    expect(result.total).toBe(4_000_000_000 + OVERHEAD);
+  });
+
+  test("null modelInfo produces zero KV cache", () => {
+    const result = estimateVRAM(null, 4_000_000_000, 4096);
+    expect(result.kvCache).toBe(0);
+  });
+
+  test("zero numCtx produces zero KV cache", () => {
+    const result = estimateVRAM(modelInfo7B, 4_000_000_000, 0);
+    expect(result.kvCache).toBe(0);
+  });
+
+  test("zero modelSizeBytes still works", () => {
+    const result = estimateVRAM(modelInfo7B, 0, 4096);
+    expect(result.weights).toBe(0);
+    expect(result.kvCache).toBeGreaterThan(0);
+    expect(result.total).toBe(result.kvCache + OVERHEAD);
   });
 });
