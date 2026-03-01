@@ -438,6 +438,12 @@ jane.smith@acme.com
     expect(typeof result.summary).toBe("string");
     expect(result.summary.length).toBeGreaterThan(20);
 
+    // Priority
+    const VALID_PRIORITIES = ["urgent", "action-needed", "informational", "low"];
+    expect(result.priority).toBeDefined();
+    expect(VALID_PRIORITIES).toContain(result.priority);
+    console.log("  Priority:", result.priority);
+
     // Events — should find the meeting
     expect(Array.isArray(result.events)).toBe(true);
     expect(result.events.length).toBeGreaterThanOrEqual(1);

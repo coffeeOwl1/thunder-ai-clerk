@@ -34,6 +34,16 @@ document.addEventListener("DOMContentLoaded", async () => {
   // --- Render summary ---
   document.getElementById("summary").textContent = analysis.summary || "(no summary)";
 
+  // --- Render priority badge (prepend after textContent is set) ---
+  if (analysis.priority && analysis.priority !== "informational") {
+    const badge = document.createElement("span");
+    badge.className = `priority-badge priority-${analysis.priority}`;
+    badge.textContent = analysis.priority === "action-needed"
+      ? "Action Needed"
+      : analysis.priority.charAt(0).toUpperCase() + analysis.priority.slice(1);
+    document.getElementById("summary").prepend(badge);
+  }
+
   // --- Render detected items ("What I Found") ---
   const detectedEl = document.getElementById("detected-items");
   const detectedSection = document.getElementById("detected-section");

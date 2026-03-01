@@ -219,6 +219,12 @@ async function processNextInQueue() {
     }
 
     if (result) {
+      // Normalize priority field
+      const VALID_PRIORITIES = ["urgent", "action-needed", "informational", "low"];
+      if (!result.priority || !VALID_PRIORITIES.includes(result.priority)) {
+        result.priority = "informational";
+      }
+
       // Normalize item previews
       for (const key of ["events", "tasks", "contacts"]) {
         if (Array.isArray(result[key])) {

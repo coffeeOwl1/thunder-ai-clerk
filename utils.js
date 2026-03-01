@@ -657,7 +657,13 @@ Extract these sections:
 
 1. **summary**: A 2-5 sentence overview of the email's content, key points, and any action needed.
 
-2. **events**: An array of ALL calendar events found. For each event include:
+2. **priority**: One of "urgent", "action-needed", "informational", or "low".
+   - "urgent": Requires immediate action — deadlines today/tomorrow, time-sensitive requests, security alerts, cancellations.
+   - "action-needed": Requires a response or action but not immediately — meeting invites, task assignments, questions directed at the reader.
+   - "informational": Useful to read but no action required — status updates, newsletters with relevant content, FYI messages.
+   - "low": Noise — marketing, automated notifications, bulk newsletters, no-reply confirmations.
+
+3. **events**: An array of ALL calendar events found. For each event include:
    - "preview": short one-line description (e.g. "Team Meeting — Mar 5, 2pm-3pm")
    - "startDate": YYYYMMDD or YYYYMMDDTHHMMSS
    - "endDate": YYYYMMDD or YYYYMMDDTHHMMSS (omit if not mentioned)
@@ -668,7 +674,7 @@ Extract these sections:
    - "category": best matching category (if categories are available)
    Include past events too — the user may want to add them to their calendar.
 
-3. **tasks**: An array of ALL tasks/action items found. For each task include:
+4. **tasks**: An array of ALL tasks/action items found. For each task include:
    - "preview": short one-line description (e.g. "Submit report — due Friday")
    - "initialDate": YYYYMMDD or YYYYMMDDTHHMMSS (omit if not mentioned)
    - "dueDate": YYYYMMDD or YYYYMMDDTHHMMSS (omit if not mentioned)
@@ -676,20 +682,21 @@ Extract these sections:
    - "description": brief 1-2 sentence summary of the task
    - "category": best matching category (if categories are available)
 
-4. **contacts**: An array of people with extractable contact info. For each contact include:
+5. **contacts**: An array of people with extractable contact info. For each contact include:
    - "preview": short one-line description (e.g. "Jane Smith — Acme Corp, CTO")
    - "firstName", "lastName", "email", "phone", "company", "jobTitle"
    Use the From header as a hint: ${safeAuthor}. Omit fields you cannot find.
 
-5. **tags**: An array of 1-3 descriptive tags for categorizing this email. Tags should be short (1-3 words), capitalized naturally. Do NOT use generic tags like "Email" or "Message".${existingTagInstruction}
+6. **tags**: An array of 1-3 descriptive tags for categorizing this email. Tags should be short (1-3 words), capitalized naturally. Do NOT use generic tags like "Email" or "Message".${existingTagInstruction}
 
-6. **reply**: A draft reply body the user can review and edit. Match the tone of the original — formal if formal, casual if casual. Do NOT include greeting or sign-off. Write from the recipient's perspective. For questions you cannot answer, insert bracketed placeholders like [your availability]. For invitations, draft an enthusiastic acceptance. Plain text only.
+7. **reply**: A draft reply body the user can review and edit. Match the tone of the original — formal if formal, casual if casual. Do NOT include greeting or sign-off. Write from the recipient's perspective. For questions you cannot answer, insert bracketed placeholders like [your availability]. For invitations, draft an enthusiastic acceptance. Plain text only.
 
-7. **forwardSummary**: A TL;DR line followed by bullet points covering the key information for forwarding. Keep under 150 words. Preserve specific dates, names, numbers.
+8. **forwardSummary**: A TL;DR line followed by bullet points covering the key information for forwarding. Keep under 150 words. Preserve specific dates, names, numbers.
 
 Respond with JSON only — no explanation, no markdown fences. Use this exact structure:
 {
 "summary": "Email overview...",
+"priority": "informational",
 "events": [{"preview": "...", "startDate": "...", "endDate": "...", "summary": "...", "forceAllDay": false, "attendees": [], "description": "...", "category": "..."}],
 "tasks": [{"preview": "...", "initialDate": "...", "dueDate": "...", "summary": "...", "description": "...", "category": "..."}],
 "contacts": [{"preview": "...", "firstName": "...", "lastName": "...", "email": "...", "phone": "...", "company": "...", "jobTitle": "..."}],

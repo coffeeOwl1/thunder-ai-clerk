@@ -809,6 +809,9 @@ function prepareCachedAnalysis(cached, message, emailBody, settings) {
     analysis._replyFailed = true;
   }
 
+  // Priority
+  analysis.priority = raw.priority || "informational";
+
   // Tags, forward summary — store for quick actions
   analysis._cachedTags = Array.isArray(raw.tags) ? raw.tags : [];
   analysis._cachedForwardSummary = (raw.forwardSummary || "").trim();
@@ -1366,8 +1369,15 @@ async function updateMessageDisplayBadge(tab, message) {
       if (Array.isArray(raw.contacts)) count += raw.contacts.length;
 
       if (count > 0) {
+        const priorityColors = {
+          urgent:          "#F44336",  // red
+          "action-needed": "#FF9800",  // orange
+          informational:   "#4CAF50",  // green
+          low:             "#9E9E9E",  // grey
+        };
+        const badgeColor = priorityColors[raw.priority] || "#4CAF50";
         browser.messageDisplayAction.setBadgeText({ tabId, text: String(count) });
-        browser.messageDisplayAction.setBadgeBackgroundColor({ tabId, color: "#4CAF50" });
+        browser.messageDisplayAction.setBadgeBackgroundColor({ tabId, color: badgeColor });
       } else {
         // Cached but nothing found — show a check mark via empty badge
         browser.messageDisplayAction.setBadgeText({ tabId, text: "✓" });

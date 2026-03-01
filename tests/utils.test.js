@@ -1292,15 +1292,24 @@ describe("buildCombinedExtractionPrompt", () => {
   const currentDt = "02/20/2026";
   const attendees = ["alice@example.com", "bob@example.com"];
 
-  test("includes all seven extraction sections", () => {
+  test("includes all eight extraction sections", () => {
     const prompt = buildCombinedExtractionPrompt(body, subject, author, mailDt, currentDt, attendees, null, []);
     expect(prompt).toContain('"summary"');
+    expect(prompt).toContain('"priority"');
     expect(prompt).toContain('"events"');
     expect(prompt).toContain('"tasks"');
     expect(prompt).toContain('"contacts"');
     expect(prompt).toContain('"tags"');
     expect(prompt).toContain('"reply"');
     expect(prompt).toContain('"forwardSummary"');
+  });
+
+  test("includes priority level definitions", () => {
+    const prompt = buildCombinedExtractionPrompt(body, subject, author, mailDt, currentDt, [], null, []);
+    expect(prompt).toContain('"urgent"');
+    expect(prompt).toContain('"action-needed"');
+    expect(prompt).toContain('"informational"');
+    expect(prompt).toContain('"low"');
   });
 
   test("includes email data markers", () => {
