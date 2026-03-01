@@ -24,6 +24,7 @@ const {
   formatDatetime,
   currentDatetime,
   estimateVRAM,
+  parseListUnsubscribe,
 } = require("../utils.js");
 
 // ---------------------------------------------------------------------------
@@ -1370,5 +1371,83 @@ describe("buildCombinedExtractionPrompt", () => {
     const prompt = buildCombinedExtractionPrompt(body, subject, author, mailDt, currentDt, [], null, []);
     expect(prompt).toContain("TL;DR");
     expect(prompt).toContain("bullet points");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseListUnsubscribe
+// ---------------------------------------------------------------------------
+
+describe("parseListUnsubscribe", () => {
+  test("null input returns both null", () => {
+    expect(parseListUnsubscribe(null)).toEqual({ mailto: null, https: null });
+  });
+
+  test("undefined input returns both null", () => {
+    expect(parseListUnsubscribe(undefined)).toEqual({ mailto: null, https: null });
+  });
+
+  test("empty string returns both null", () => {
+    expect(parseListUnsubscribe("")).toEqual({ mailto: null, https: null });
+  });
+
+  test("single mailto URL", () => {
+    const result = parseListUnsubscribe("<mailto:unsub@example.com>");
+    expect(result).toEqual({ mailto: "mailto:unsub@example.com", https: null });
+  });
+
+  test("single https URL", () => {
+    const result = parseListUnsubscribe("<https://example.com/unsub?id=123>");
+    expect(result).toEqual({ mailto: null, https: "https://example.com/unsub?id=123" });
+  });
+
+  test("both mailto and https (mailto first)", () => {
+    const result = parseListUnsubscribe("<mailto:unsub@example.com>, <https://example.com/unsub>");
+    expect(result).toEqual({ mailto: "mailto:unsub@example.com", https: "https://example.com/unsub" });
+  });
+
+  test("both mailto and https (https first)", () => {
+    const result = parseListUnsubscribe("<https://example.com/unsub>, <mailto:unsub@example.com>");
+    expect(result).toEqual({ mailto: "mailto:unsub@example.com", https: "https://example.com/unsub" });
+  });
+
+  test("http:// accepted in https field", () => {
+    const result = parseListUnsubscribe("<http://example.com/unsub>");
+    expect(result).toEqual({ mailto: null, https: "http://example.com/unsub" });
+  });
+
+  test("first of each type when multiples present", () => {
+    const result = parseListUnsubscribe(
+      "<mailto:first@example.com>, <mailto:second@example.com>, <https://first.example.com>, <https://second.example.com>"
+    );
+    expect(result).toEqual({ mailto: "mailto:first@example.com", https: "https://first.example.com" });
+  });
+
+  test("whitespace variations", () => {
+    const result = parseListUnsubscribe("  < mailto:unsub@example.com > ,  < https://example.com/unsub >  ");
+    expect(result).toEqual({ mailto: "mailto:unsub@example.com", https: "https://example.com/unsub" });
+  });
+
+  test("case-insensitive scheme matching", () => {
+    const result = parseListUnsubscribe("<MAILTO:unsub@example.com>, <HTTPS://example.com/unsub>");
+    expect(result).toEqual({ mailto: "MAILTO:unsub@example.com", https: "HTTPS://example.com/unsub" });
+  });
+
+  test("non-mailto/http schemes ignored", () => {
+    const result = parseListUnsubscribe("<ftp://example.com/unsub>");
+    expect(result).toEqual({ mailto: null, https: null });
+  });
+
+  test("malformed input without angle brackets returns nulls", () => {
+    const result = parseListUnsubscribe("https://example.com/unsub, mailto:unsub@example.com");
+    expect(result).toEqual({ mailto: null, https: null });
+  });
+
+  test("complex mailto with query parameters", () => {
+    const result = parseListUnsubscribe("<mailto:unsub@example.com?subject=Unsubscribe&body=Please%20remove%20me>");
+    expect(result).toEqual({
+      mailto: "mailto:unsub@example.com?subject=Unsubscribe&body=Please%20remove%20me",
+      https: null,
+    });
   });
 });

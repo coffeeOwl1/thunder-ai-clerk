@@ -915,6 +915,21 @@ async function handleAutoAnalyzeCached(cached, message, emailBody, settings) {
   const analysis = prepareCachedAnalysis(cached, message, emailBody, settings);
   const replyBody = analysis._replyBody || null;
 
+  // Detect List-Unsubscribe header (not AI-driven, pure header parsing)
+  try {
+    const full = await browser.messages.getFull(message.id);
+    const unsubHeader = full.headers?.["list-unsubscribe"]?.[0];
+    if (unsubHeader) {
+      analysis._unsubscribe = parseListUnsubscribe(unsubHeader);
+      // Clear if neither type was found
+      if (!analysis._unsubscribe.mailto && !analysis._unsubscribe.https) {
+        analysis._unsubscribe = null;
+      }
+    }
+  } catch (e) {
+    // Silent — dialog just won't show the unsubscribe action
+  }
+
   // Pre-build extraction cache from cached data for button clicks
   const extractionCache = {};
 
@@ -947,6 +962,9 @@ async function handleAutoAnalyzeCached(cached, message, emailBody, settings) {
       extractionCache.quickCatalog = { data: { aiTags: analysis._cachedTags, existingTags }, error: null };
     } catch {}
   }
+  if (analysis._unsubscribe) {
+    extractionCache.quickUnsubscribe = { data: analysis._unsubscribe, error: null };
+  }
 
   // Register scoped listener for item button clicks, reply usage, and refresh
   const itemListener = async (msg) => {
@@ -967,7 +985,7 @@ async function handleAutoAnalyzeCached(cached, message, emailBody, settings) {
 
     // Dialog signals ready — for cached data, immediately send all batch-ready signals
     if (msg.analyzeAction === "dialogReady") {
-      for (const group of ["events", "tasks", "contacts", "quickCalendar", "quickTask", "quickContact", "quickForward", "quickCatalog"]) {
+      for (const group of ["events", "tasks", "contacts", "quickCalendar", "quickTask", "quickContact", "quickForward", "quickCatalog", "quickUnsubscribe"]) {
         if (extractionCache[group]) {
           browser.runtime.sendMessage({ batchReady: true, group, success: true }).catch(() => {});
         }
@@ -1080,6 +1098,20 @@ async function handleAutoAnalyzeCached(cached, message, emailBody, settings) {
             }
           } else {
             await catalogEmail(message, emailBody, settings);
+          }
+          browser.runtime.sendMessage({ analyzeItemResult: true, group, index, success: true }).catch(() => {});
+          return;
+        }
+        if (group === "quickUnsubscribe") {
+          const unsub = extractionCache.quickUnsubscribe?.data;
+          if (unsub?.https) {
+            await browser.windows.openDefaultBrowser(unsub.https);
+          } else if (unsub?.mailto) {
+            const parsed = new URL(unsub.mailto);
+            const to = decodeURIComponent(parsed.pathname);
+            const subject = parsed.searchParams.get("subject") || "Unsubscribe";
+            const body = parsed.searchParams.get("body") || "";
+            await browser.compose.beginNew({ to, subject, body });
           }
           browser.runtime.sendMessage({ analyzeItemResult: true, group, index, success: true }).catch(() => {});
           return;
