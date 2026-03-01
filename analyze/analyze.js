@@ -95,6 +95,41 @@ document.addEventListener("DOMContentLoaded", async () => {
     detectedEl.appendChild(groupDiv);
   }
 
+  // Unsubscribe — detected from List-Unsubscribe header, not AI-driven
+  if (analysis._unsubscribe) {
+    hasDetected = true;
+    const groupDiv = document.createElement("div");
+    groupDiv.className = "group";
+
+    const groupLabel = document.createElement("div");
+    groupLabel.className = "group-label";
+    groupLabel.textContent = "Unsubscribe";
+    groupDiv.appendChild(groupLabel);
+
+    const row = document.createElement("div");
+    row.className = "item-row";
+
+    const text = document.createElement("span");
+    text.className = "item-text";
+    text.textContent = analysis._unsubscribe.https
+      ? "Unsubscribe link found (opens browser)"
+      : "Unsubscribe link found (opens compose)";
+
+    const btn = document.createElement("button");
+    btn.className = "add-btn";
+    btn.dataset.group = "quickUnsubscribe";
+    btn.dataset.index = "0";
+    btn.dataset.btnText = "Unsub";
+    btn.textContent = "Unsub";
+    btn.disabled = false;
+    btn.addEventListener("click", () => handleItemClick(btn, "quickUnsubscribe", 0));
+
+    row.appendChild(text);
+    row.appendChild(btn);
+    groupDiv.appendChild(row);
+    detectedEl.appendChild(groupDiv);
+  }
+
   if (hasDetected) {
     detectedSection.style.display = "";
   }

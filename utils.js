@@ -738,6 +738,29 @@ function estimateVRAM(modelInfo, modelSizeBytes, numCtx) {
   };
 }
 
+// Parse the List-Unsubscribe header (RFC 2369).
+// Returns { mailto: string|null, https: string|null } with the first of each type.
+function parseListUnsubscribe(headerValue) {
+  const result = { mailto: null, https: null };
+  if (!headerValue) return result;
+
+  // Extract all <angle-bracket> enclosed URLs
+  const matches = headerValue.match(/<[^>]+>/g);
+  if (!matches) return result;
+
+  for (const m of matches) {
+    const url = m.slice(1, -1).trim();
+    if (!result.mailto && /^mailto:/i.test(url)) {
+      result.mailto = url;
+    } else if (!result.https && /^https?:/i.test(url)) {
+      result.https = url;
+    }
+    if (result.mailto && result.https) break;
+  }
+
+  return result;
+}
+
 // Node.js export (used by Jest tests). Browser environment ignores this block.
 if (typeof module !== "undefined") {
   module.exports = {
@@ -764,5 +787,6 @@ if (typeof module !== "undefined") {
     formatDatetime,
     currentDatetime,
     estimateVRAM,
+    parseListUnsubscribe,
   };
 }
