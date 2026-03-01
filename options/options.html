@@ -83,6 +83,40 @@
     <strong>Minimum recommended model:</strong> <code>mistral:7b</code> or any comparable 7B general-instruction model. Smaller models tend to produce less reliable results. Larger or more capable models will generally perform better.
   </div>
 
+  <!-- LLM Parameters -->
+  <h3>LLM Parameters</h3>
+
+  <label for="numCtx">Context Window</label>
+  <select id="numCtx">
+    <option value="0">Model default</option>
+    <option value="2048">2K — minimal (saves VRAM)</option>
+    <option value="4096">4K</option>
+    <option value="8192">8K</option>
+    <option value="16384">16K — recommended for Auto Analyze</option>
+    <option value="32768">32K</option>
+    <option value="65536">64K</option>
+    <option value="131072">128K</option>
+  </select>
+  <div class="hint">How much text the model can process at once. Larger values use more VRAM.</div>
+
+  <div id="vram-estimate" style="display:none; margin-top:10px; padding:8px 10px; background:#f0f4ff; border:1px solid #c5d0f0; border-radius:4px; font-size:12px; color:#333; line-height:1.6;">
+    <strong id="vram-total"></strong><br>
+    <span style="font-size:11px; color:#555;" id="vram-breakdown"></span>
+  </div>
+
+  <label for="numPredict">Max Output Tokens</label>
+  <select id="numPredict">
+    <option value="0">Model default</option>
+    <option value="1024">1K — short responses</option>
+    <option value="2048">2K</option>
+    <option value="4096">4K — standard</option>
+    <option value="8192">8K — thinking models (DeepSeek, QwQ, etc.)</option>
+    <option value="12288">12K — thinking models + Auto Analyze</option>
+  </select>
+  <div class="hint">Maximum length of each AI response. Some models (like DeepSeek, QwQ) think before answering and need more room.</div>
+
+  <div id="llm-recommendation" style="display:none; margin-top:8px; padding:7px 10px; background:#fff8e1; border:1px solid #f0c040; border-radius:4px; font-size:11px; color:#7a5d00; line-height:1.5;"></div>
+
   <!-- Calendar event defaults -->
   <h3>Calendar Events</h3>
 
@@ -151,6 +185,84 @@
   </div>
   <div class="hint">Ask the AI to pick the best matching category from your Thunderbird calendar categories.</div>
 
+  <!-- Compose actions -->
+  <h3>Compose Actions</h3>
+
+  <label for="replyMode">Draft Reply Mode</label>
+  <select id="replyMode">
+    <option value="replyToSender">Reply to sender only (default)</option>
+    <option value="replyToAll">Reply to all</option>
+  </select>
+  <div class="hint">Whether "Draft Reply" replies to the sender only or to all recipients.</div>
+
+  <!-- Contacts -->
+  <h3>Contacts</h3>
+
+  <label for="contactAddressBook">Default Address Book</label>
+  <div class="row">
+    <select id="contactAddressBook">
+      <option value="">Use first available</option>
+    </select>
+    <button id="refresh-addressbooks">Refresh</button>
+  </div>
+  <div class="hint">Which address book to save extracted contacts to.</div>
+
+  <!-- Email Cataloging -->
+  <h3>Email Cataloging</h3>
+
+  <div class="checkbox-row">
+    <input type="checkbox" id="autoTagAfterAction" />
+    <label for="autoTagAfterAction">Auto-tag emails after other actions</label>
+  </div>
+  <div class="hint">Automatically apply AI-generated tags to emails after using Add to Calendar, Add as Task, and other actions.</div>
+
+  <div class="checkbox-row">
+    <input type="checkbox" id="allowNewTags" />
+    <label for="allowNewTags">Allow AI to create new tags (experimental)</label>
+  </div>
+  <div class="hint" style="color:#b45309;">When disabled, the AI can only apply tags that already exist in Thunderbird. Enable at your own risk — the AI may create many one-off tags that clutter your tag list.</div>
+
+  <!-- Auto Analyze -->
+  <h3>Auto Analyze</h3>
+
+  <div class="checkbox-row">
+    <input type="checkbox" id="autoAnalyzeEnabled" />
+    <label for="autoAnalyzeEnabled">Enable Auto Analyze</label>
+  </div>
+  <div class="hint">Adds the "Auto Analyze" context menu item and keyboard shortcut. Disabled by default due to high model requirements.</div>
+
+  <div style="margin-top:10px; padding:8px 10px; background:#fff8e1; border:1px solid #f0c040; border-radius:4px; font-size:11px; color:#444; line-height:1.5;">
+    <strong>Requirements notice:</strong> Auto Analyze sends a large, complex prompt and requires a capable model with generous token limits. On smaller or slower models it can be very slow and may produce incomplete results.<br><br>
+    <strong>Minimum recommended:</strong> a 20B+ parameter model (e.g. <code>gpt-oss:20b</code>) with at least 16 GB VRAM. Smaller models are not recommended for this feature — accuracy drops significantly.<br><br>
+    If results look wrong, enable <em>"Show prompt preview"</em> in the Debug section below and check the raw AI output for issues.
+  </div>
+
+  <!-- Background Processing -->
+  <h3>Background Processing</h3>
+
+  <div class="checkbox-row">
+    <input type="checkbox" id="bgProcessingEnabled" />
+    <label for="bgProcessingEnabled">Process emails in the background</label>
+  </div>
+  <div class="hint">Automatically analyze incoming emails so results are instant when you open Auto Analyze. Requires Auto Analyze to be enabled.</div>
+
+  <label for="bgCacheMaxDays">Cache duration</label>
+  <select id="bgCacheMaxDays">
+    <option value="1">1 day (default)</option>
+    <option value="3">3 days</option>
+    <option value="7">7 days</option>
+    <option value="14">14 days</option>
+    <option value="30">30 days</option>
+  </select>
+  <div class="hint">How long to keep cached analysis results. Older entries are automatically cleaned up.</div>
+
+  <div id="bg-stats" style="margin-top:10px; padding:8px 10px; background:#f0f4ff; border:1px solid #c5d0f0; border-radius:4px; font-size:12px; color:#333; line-height:2;">
+    <span id="bg-stats-text"></span><br>
+    <button id="bg-stop-btn" style="padding:2px 10px; font-size:11px; cursor:pointer; border-radius:3px; border:1px solid #c5d0f0; background:#fff;">Stop</button>
+    <button id="bg-start-btn" style="padding:2px 10px; font-size:11px; cursor:pointer; border-radius:3px; border:1px solid #c5d0f0; background:#fff;">Start</button>
+    <button id="clear-cache-btn" style="padding:2px 10px; font-size:11px; cursor:pointer; border-radius:3px; border:1px solid #c5d0f0; background:#fff;">Clear Cache</button>
+  </div>
+
   <!-- Debug -->
   <h3>Debug</h3>
 
@@ -165,6 +277,8 @@
   </div>
   <div id="status"></div>
 
+  <script src="../config.js"></script>
+  <script src="../utils.js"></script>
   <script src="options.js"></script>
 </body>
 </html>

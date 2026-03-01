@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "ThunderClerk-AI",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Add emails to Thunderbird calendar or tasks via a local Ollama instance — no text selection required.",
   "author": "Ryan",
   "homepage_url": "https://github.com/coffeeOwl1/thunderclerk-ai",
@@ -10,7 +10,7 @@
     "gecko": {
       "id": "thunderclerk-ai@coffeeOwl1",
       "strict_min_version": "128.0",
-      "strict_max_version": "147.*"
+      "strict_max_version": "148.*"
     }
   },
 
@@ -19,9 +19,17 @@
   "permissions": [
     "menus",
     "messagesRead",
+    "messagesTagsList",
+    "messagesTags",
+    "messagesUpdate",
     "storage",
     "messageDisplay",
     "notifications",
+    "compose",
+    "addressBooks",
+    "messagesMove",
+    "messagesDelete",
+    "accountsRead",
     "<all_urls>"
   ],
 
@@ -42,7 +50,25 @@
   },
 
   "background": {
-    "scripts": ["utils.js", "background.js"]
+    "scripts": ["config.js", "utils.js", "cache.js", "processor.js", "background.js"]
+  },
+
+  "message_display_action": {
+    "default_title": "ThunderClerk-AI: Auto Analyze",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png"
+    }
+  },
+
+  "commands": {
+    "_execute_message_display_action": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+E"
+      },
+      "description": "Auto Analyze the displayed email"
+    }
   },
 
   "options_ui": {

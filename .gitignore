@@ -5,6 +5,9 @@ package-lock.json
 # Build artifacts
 *.xpi
 *.zip
+config.js
+config.dev.js
+config.test.js
 
 # OS / editor
 .DS_Store

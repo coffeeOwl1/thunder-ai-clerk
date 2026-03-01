@@ -10,14 +10,19 @@
 const {
   buildCalendarPrompt,
   buildTaskPrompt,
+  buildCombinedExtractionPrompt,
   extractJSON,
+
   normalizeCalDate,
   advancePastYear,
   applyCalendarDefaults,
 } = require("../utils.js");
 
-const OLLAMA_HOST  = process.env.OLLAMA_HOST  || "http://127.0.0.1:11434";
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "mistral:7b";
+let testConfig = {};
+try { testConfig = require("../config.test.js"); } catch {}
+
+const OLLAMA_HOST  = process.env.OLLAMA_HOST  || testConfig.ollamaHost  || "http://127.0.0.1:11434";
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || testConfig.ollamaModel || "mistral:7b";
 
 // Reference dates — Feb 20 2026 is a Friday.
 const MAIL_DATE = "02/20/2026";
@@ -45,12 +50,21 @@ beforeAll(async () => {
   }
 }, 10_000);
 
-async function callOllama(prompt) {
+async function callOllama(prompt, options = {}) {
+  const timeoutMs = options.timeout || 90_000;
+  const body = { model: OLLAMA_MODEL, prompt, stream: false };
+  const ollamaOpts = {};
+  if (options.num_predict) ollamaOpts.num_predict = options.num_predict;
+  if (options.num_ctx) ollamaOpts.num_ctx = options.num_ctx;
+  if (options.temperature !== undefined) ollamaOpts.temperature = options.temperature;
+  if (Object.keys(ollamaOpts).length > 0) body.options = ollamaOpts;
+  if (options.format) body.format = options.format;
+
   const res = await fetch(`${OLLAMA_HOST}/api/generate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model: OLLAMA_MODEL, prompt, stream: false }),
-    signal: AbortSignal.timeout(90_000),
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(timeoutMs),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
   return (await res.json()).response;
@@ -76,11 +90,11 @@ async function extractCalendar(emailBody, subject, opts = {}) {
 }
 
 // Wrap each test so it auto-skips when Ollama is offline.
-function itOnline(name, fn) {
+function itOnline(name, fn, timeout) {
   test(name, async () => {
     if (!ollamaAvailable) return;
     await fn();
-  }, 90_000);
+  }, timeout || 90_000);
 }
 
 // Assert date part only (YYYYMMDD), with an optional tolerance in days.
@@ -311,5 +325,162 @@ describe("calendar integration", () => {
     expect(typeof parsed.description).toBe("string");
     expect(parsed.description.length).toBeGreaterThan(0);
   });
+
+});
+
+// ---------------------------------------------------------------------------
+// Task extraction scenarios
+// ---------------------------------------------------------------------------
+
+// Mirrors the normalizeTaskData + pipeline from background.js handleTask().
+async function extractTask(emailBody, subject, opts = {}) {
+  const mailDate  = opts.mailDate   || MAIL_DATE;
+  const currentDt = opts.currentDate || TODAY;
+  const prompt = buildTaskPrompt(emailBody, subject, mailDate, currentDt, null);
+  const raw    = await callOllama(prompt);
+  const parsed = JSON.parse(extractJSON(raw));
+  // normalizeTaskData (from background.js)
+  if (parsed.dueDate)     parsed.dueDate     = normalizeCalDate(parsed.dueDate);
+  if (parsed.initialDate) parsed.initialDate = normalizeCalDate(parsed.initialDate);
+  if (parsed.InitialDate) {
+    parsed.initialDate = normalizeCalDate(parsed.InitialDate);
+    delete parsed.InitialDate;
+  }
+  if (!parsed.summary) parsed.summary = subject;
+  return parsed;
+}
+
+describe("task integration", () => {
+
+  itOnline("explicit deadline → dueDate extracted", async () => {
+    const result = await extractTask(
+      "Please submit the Q1 budget report by March 14, 2026. Finance needs it before the board meeting.",
+      "Q1 Budget Report Due"
+    );
+    expect(result.summary).toBeTruthy();
+    expect(result.dueDate).toBeDefined();
+    expectDate(result.dueDate, "20260314", 1);
+  });
+
+  itOnline("no dates in email → summary only, no crash", async () => {
+    const result = await extractTask(
+      "Don't forget to update the team wiki with the new onboarding steps we discussed.",
+      "Update Team Wiki"
+    );
+    expect(result).toBeDefined();
+    expect(typeof result.summary).toBe("string");
+    expect(result.summary.length).toBeGreaterThan(0);
+    // dueDate may or may not be present — just verify format if it is
+    if (result.dueDate) {
+      expect(result.dueDate).toMatch(/^\d{8}T\d{6}$/);
+    }
+  });
+
+  itOnline("relative deadline → resolves to a future date", async () => {
+    const result = await extractTask(
+      "Can you get the client proposal draft done by next Friday? They need it for their Monday meeting.",
+      "Client Proposal Draft",
+      { mailDate: "02/20/2026", currentDate: "02/20/2026" }
+    );
+    expect(result.summary).toBeTruthy();
+    expect(result.dueDate).toBeDefined();
+    // "next Friday" from Feb 20 (Friday) = Feb 27; allow tolerance
+    expect(result.dueDate >= "20260220T000000").toBe(true);
+    expectDate(result.dueDate, "20260227", 7);
+  });
+
+});
+
+// ---------------------------------------------------------------------------
+// Combined extraction prompt (background processing)
+// ---------------------------------------------------------------------------
+describe("Combined extraction prompt", () => {
+
+  test("extracts all fields from a meeting invite email", async () => {
+    if (!ollamaAvailable) return;
+
+    const body = `Hi team,
+
+Let's meet next Thursday at 2pm in the Main Conference Room to discuss
+the Q1 budget review. Please bring your department reports.
+
+Also, I need everyone to submit their expense reports by March 1st.
+
+Best regards,
+Jane Smith
+CFO, Acme Corp
+jane.smith@acme.com
+(555) 123-4567`;
+
+    const subject = "Q1 Budget Review Meeting - Thursday 2pm";
+    const author = "Jane Smith <jane.smith@acme.com>";
+
+    const prompt = buildCombinedExtractionPrompt(
+      body, subject, author, MAIL_DATE, TODAY,
+      ["jane.smith@acme.com", "team@acme.com"],
+      ["Work", "Finance", "Personal"],
+      ["Work", "Finance", "Meetings"]
+    );
+
+    console.log("  Combined prompt length:", prompt.length, "chars");
+    const raw = await callOllama(prompt, {
+      num_ctx: 16384, num_predict: 16384, timeout: 300_000,
+    });
+    console.log("  Raw response length:", raw.length, "chars");
+
+    const jsonStr = extractJSON(raw);
+    const result = JSON.parse(jsonStr);
+
+    console.log("  Fields present:", Object.keys(result).join(", "));
+
+    // Summary
+    expect(result.summary).toBeDefined();
+    expect(typeof result.summary).toBe("string");
+    expect(result.summary.length).toBeGreaterThan(20);
+
+    // Events — should find the meeting
+    expect(Array.isArray(result.events)).toBe(true);
+    expect(result.events.length).toBeGreaterThanOrEqual(1);
+    const meetingEvent = result.events[0];
+    expect(meetingEvent.preview).toBeDefined();
+    expect(meetingEvent.summary || meetingEvent.preview).toMatch(/budget|review|meeting/i);
+    // Should have a startDate
+    expect(meetingEvent.startDate).toBeDefined();
+    console.log("  Event startDate:", meetingEvent.startDate);
+
+    // Tasks — should find the expense report deadline
+    expect(Array.isArray(result.tasks)).toBe(true);
+    expect(result.tasks.length).toBeGreaterThanOrEqual(1);
+    const task = result.tasks[0];
+    expect(task.preview).toBeDefined();
+    expect(task.summary || task.preview).toMatch(/expense|report/i);
+
+    // Contacts — should find Jane Smith
+    expect(Array.isArray(result.contacts)).toBe(true);
+    expect(result.contacts.length).toBeGreaterThanOrEqual(1);
+    const contact = result.contacts[0];
+    expect(contact.preview).toBeDefined();
+    // At least one of these should be present
+    const hasContactInfo = contact.firstName || contact.lastName || contact.email;
+    expect(hasContactInfo).toBeTruthy();
+
+    // Tags
+    expect(Array.isArray(result.tags)).toBe(true);
+    expect(result.tags.length).toBeGreaterThanOrEqual(1);
+    expect(result.tags.length).toBeLessThanOrEqual(3);
+    console.log("  Tags:", result.tags.join(", "));
+
+    // Reply
+    expect(typeof result.reply).toBe("string");
+    expect(result.reply.length).toBeGreaterThan(10);
+
+    // Forward summary
+    expect(typeof result.forwardSummary).toBe("string");
+    expect(result.forwardSummary.length).toBeGreaterThan(10);
+    expect(result.forwardSummary.toLowerCase()).toMatch(/tl;dr|budget|meeting/i);
+
+    console.log("  Combined extraction: all fields validated");
+
+  }, 300_000);
 
 });
