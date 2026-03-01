@@ -21,12 +21,12 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     refreshBtn.addEventListener("click", async () => {
       refreshBtn.disabled = true;
-      refreshBtn.textContent = "Refreshing\u2026";
+      refreshBtn.textContent = "Re-analyzing\u2026";
       await browser.runtime.sendMessage({ analyzeAction: "refresh" });
       // The background will close and reopen the dialog; if it doesn't, restore button
       setTimeout(() => {
         refreshBtn.disabled = false;
-        refreshBtn.textContent = "Refresh";
+        refreshBtn.textContent = "Re-analyze";
       }, 5000);
     });
   }

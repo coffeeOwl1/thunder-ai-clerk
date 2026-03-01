@@ -14,8 +14,7 @@ No cloud accounts, no API keys, no text selection required — just Thunderbird 
 - **Summarize & Forward** — produce a TL;DR + bullet-point summary for forwarding
 - **Extract Contact** — pull contact info from email signatures into your address book
 - **Catalog Email** — auto-tag emails using AI, with support for existing Thunderbird tags
-- **Auto Analyze** — one-click analysis from the message header toolbar button (next to Reply/Forward), or via `Ctrl+Shift+E`. Shows a summary, detected events/tasks/contacts ("What I Found") as clickable Add buttons, a suggested AI reply, and five Quick Actions. The toolbar button shows a badge: green with item count when cached results exist, "…" when queued for processing, "✓" when analyzed with nothing found, "!" on error. Cached results display instantly; on cache miss a single combined Ollama call runs (~30-60s) and caches the result. Archive/Delete checkboxes for post-triage cleanup. Also available via right-click context menu. Disabled by default — requires a 20B+ parameter model (see settings).
-- **Background Processing** — automatically processes incoming emails in the background using a single combined Ollama call. Results are cached persistently so Auto Analyze shows results instantly (no waiting for Ollama). New emails are processed as they arrive; existing emails are backfilled on startup. Manual actions always take priority over background processing.
+- **Auto Analyze** — one-click analysis from the message header toolbar button (next to Reply/Forward), or via `Ctrl+Shift+E`. Shows a summary, detected events/tasks/contacts ("What I Found") as clickable Add buttons, a suggested AI reply, and five Quick Actions. The toolbar button shows a badge: green with item count when cached results exist, "…" when queued for processing, "✓" when analyzed with nothing found, "!" on error. Includes background processing: incoming emails are automatically analyzed so results display instantly. Existing emails are backfilled on startup; manual actions always take priority. Archive/Delete checkboxes for post-triage cleanup. Also available via right-click context menu. Disabled by default — requires a 20B+ parameter model (see settings).
 - AI extracts title, dates, times, attendees, and (optionally) category
 - Reads the full email body — no need to select text first
 - All processing is done locally via your own Ollama instance
@@ -62,8 +61,7 @@ After installation the Settings page opens automatically. You can also reach it 
 | Allow new tags | Off | Let the AI create new tags (experimental — may clutter your tag list) |
 | Context Window (tokens) | 0 (model default) | Override the model's context window size. Controls KV cache VRAM usage. |
 | Max Output Tokens | 0 (model default) | Override the maximum generation length. Thinking/reasoning models need 8192+. |
-| Enable Auto Analyze | Off | Show the Auto Analyze menu item and keyboard shortcut. Requires a 20B+ parameter model with at least 16 GB VRAM. Smaller models produce unreliable results. |
-| Process emails in the background | Off | Automatically analyze incoming emails so Auto Analyze results are instant. Requires Auto Analyze to be enabled. |
+| Enable Auto Analyze | Off | Enables one-click analysis, background processing of incoming emails, toolbar button with badge, and the keyboard shortcut. Requires a 20B+ parameter model with at least 16 GB VRAM. Smaller models produce unreliable results. |
 | Cache duration | 1 day | How long to keep cached analysis results. Options: 1/3/7/14/30 days. |
 
 ## Keyboard Shortcuts

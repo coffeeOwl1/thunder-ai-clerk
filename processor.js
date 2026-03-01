@@ -408,13 +408,12 @@ function initBgCleanup() {
 
 async function initBgProcessor() {
   const settings = await browser.storage.sync.get({
-    bgProcessingEnabled: DEFAULTS.bgProcessingEnabled || false,
     autoAnalyzeEnabled: DEFAULTS.autoAnalyzeEnabled || false,
   });
 
-  bgEnabled = !!(settings.bgProcessingEnabled && settings.autoAnalyzeEnabled);
+  bgEnabled = !!settings.autoAnalyzeEnabled;
 
-  console.log(BG_LOG_PREFIX, `Initializing — bgProcessingEnabled: ${settings.bgProcessingEnabled}, autoAnalyzeEnabled: ${settings.autoAnalyzeEnabled}, active: ${bgEnabled}`);
+  console.log(BG_LOG_PREFIX, `Initializing — autoAnalyzeEnabled: ${settings.autoAnalyzeEnabled}, active: ${bgEnabled}`);
 
   initBgNewMailListener();
   initBgDeletedMailListener();
@@ -423,28 +422,22 @@ async function initBgProcessor() {
   if (bgEnabled) {
     bgBackfill();
   } else {
-    console.log(BG_LOG_PREFIX, "Background processing is disabled — skipping backfill");
+    console.log(BG_LOG_PREFIX, "Auto Analyze is disabled — skipping backfill");
   }
 
   // Listen for settings changes
-  let lastKnownBgSetting = settings.bgProcessingEnabled;
-  let lastKnownAutoSetting = settings.autoAnalyzeEnabled;
   browser.storage.onChanged.addListener((changes, area) => {
     if (area !== "sync") return;
-    if (changes.bgProcessingEnabled || changes.autoAnalyzeEnabled) {
-      if (changes.bgProcessingEnabled) lastKnownBgSetting = changes.bgProcessingEnabled.newValue;
-      if (changes.autoAnalyzeEnabled) lastKnownAutoSetting = changes.autoAnalyzeEnabled.newValue;
-      const newBgEnabled = lastKnownBgSetting;
-      const newAutoEnabled = lastKnownAutoSetting;
+    if (changes.autoAnalyzeEnabled) {
       const wasEnabled = bgEnabled;
-      bgEnabled = !!(newBgEnabled && newAutoEnabled);
+      bgEnabled = !!changes.autoAnalyzeEnabled.newValue;
       console.log(BG_LOG_PREFIX, `Settings changed — active: ${bgEnabled} (was: ${wasEnabled})`);
 
       if (bgEnabled && !wasEnabled) {
-        console.log(BG_LOG_PREFIX, "Background processing enabled — starting backfill");
+        console.log(BG_LOG_PREFIX, "Auto Analyze enabled — starting backfill");
         bgBackfill();
       } else if (!bgEnabled && wasEnabled) {
-        console.log(BG_LOG_PREFIX, "Background processing disabled — queue will drain without processing");
+        console.log(BG_LOG_PREFIX, "Auto Analyze disabled — queue will drain without processing");
       }
     }
 

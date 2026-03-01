@@ -21,10 +21,8 @@ const DEFAULTS = {
   // Email cataloging settings
   autoTagAfterAction:    true,
   allowNewTags:          false,
-  // Auto Analyze settings
+  // Auto Analyze settings (includes background processing and caching)
   autoAnalyzeEnabled:    false,
-  // Background processing settings
-  bgProcessingEnabled:   false,
   bgCacheMaxDays:        1,
   // LLM parameter settings
   numCtx:                0,              // 0 = use model default

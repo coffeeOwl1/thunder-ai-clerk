@@ -148,24 +148,21 @@ function syncAttendeesUI(source) {
 // --- Background Processing UI sync ---
 
 function syncBgProcessingUI(autoAnalyzeEnabled) {
-  const bgCheckbox = document.getElementById("bgProcessingEnabled");
-  const bgSelect = document.getElementById("bgCacheMaxDays");
+  const cacheLabel = document.getElementById("bgCacheMaxDays-label");
+  const cacheSelect = document.getElementById("bgCacheMaxDays");
+  const cacheHint = cacheSelect.nextElementSibling; // .hint after select
+  const statsPanel = document.getElementById("bg-stats");
 
-  if (!autoAnalyzeEnabled) {
-    bgCheckbox.disabled = true;
-    bgSelect.disabled = true;
-    bgCheckbox.parentElement.style.opacity = "0.5";
-  } else {
-    bgCheckbox.disabled = false;
-    bgSelect.disabled = false;
-    bgCheckbox.parentElement.style.opacity = "";
-  }
+  const show = autoAnalyzeEnabled ? "" : "none";
+  cacheLabel.style.display = show;
+  cacheSelect.style.display = show;
+  if (cacheHint) cacheHint.style.display = show;
+  statsPanel.style.display = show;
 
-  updateBgStats();
+  if (autoAnalyzeEnabled) updateBgStats();
 }
 
 async function updateBgStats() {
-  const statsEl = document.getElementById("bg-stats");
   const statsText = document.getElementById("bg-stats-text");
   const stopBtn = document.getElementById("bg-stop-btn");
   const startBtn = document.getElementById("bg-start-btn");
@@ -173,7 +170,9 @@ async function updateBgStats() {
   try {
     const status = await browser.runtime.sendMessage({ action: "getBgStatus" });
     if (!status) {
-      statsEl.style.display = "none";
+      statsText.textContent = "Status unavailable";
+      stopBtn.disabled = true;
+      startBtn.disabled = true;
       return;
     }
     const parts = [];
@@ -186,14 +185,15 @@ async function updateBgStats() {
     if (!status.enabled) parts.push("(stopped)");
 
     statsText.textContent = parts.length > 0 ? parts.join(" | ") : "No cached data";
-    statsEl.style.display = "block";
 
     // Toggle Stop/Start button states
     stopBtn.disabled = !status.enabled;
     startBtn.disabled = status.enabled;
   } catch (e) {
     console.warn("[ThunderClerk-AI Settings] updateBgStats failed:", e.message);
-    statsEl.style.display = "none";
+    statsText.textContent = "Status unavailable";
+    stopBtn.disabled = true;
+    startBtn.disabled = true;
   }
 }
 
@@ -338,7 +338,6 @@ async function restoreOptions() {
   document.getElementById("autoTagAfterAction").checked      = !!s.autoTagAfterAction;
   document.getElementById("allowNewTags").checked            = !!s.allowNewTags;
   document.getElementById("autoAnalyzeEnabled").checked      = !!s.autoAnalyzeEnabled;
-  document.getElementById("bgProcessingEnabled").checked     = !!s.bgProcessingEnabled;
   document.getElementById("bgCacheMaxDays").value            = String(s.bgCacheMaxDays || 1);
   document.getElementById("debugPromptPreview").checked     = !!s.debugPromptPreview;
 
@@ -404,7 +403,6 @@ async function saveOptions() {
     autoTagAfterAction:    document.getElementById("autoTagAfterAction").checked,
     allowNewTags:          document.getElementById("allowNewTags").checked,
     autoAnalyzeEnabled:    document.getElementById("autoAnalyzeEnabled").checked,
-    bgProcessingEnabled:   document.getElementById("bgProcessingEnabled").checked,
     bgCacheMaxDays:        Number(document.getElementById("bgCacheMaxDays").value) || 1,
     numCtx:                Number(document.getElementById("numCtx").value) || 0,
     numPredict:            Number(document.getElementById("numPredict").value) || 0,

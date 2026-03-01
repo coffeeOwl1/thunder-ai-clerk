@@ -229,7 +229,7 @@
     <input type="checkbox" id="autoAnalyzeEnabled" />
     <label for="autoAnalyzeEnabled">Enable Auto Analyze</label>
   </div>
-  <div class="hint">Adds the "Auto Analyze" context menu item and keyboard shortcut. Disabled by default due to high model requirements.</div>
+  <div class="hint">Enables one-click email analysis, background processing of incoming emails, toolbar button with badge, and the keyboard shortcut. Disabled by default due to high model requirements.</div>
 
   <div style="margin-top:10px; padding:8px 10px; background:#fff8e1; border:1px solid #f0c040; border-radius:4px; font-size:11px; color:#444; line-height:1.5;">
     <strong>Requirements notice:</strong> Auto Analyze sends a large, complex prompt and requires a capable model with generous token limits. On smaller or slower models it can be very slow and may produce incomplete results.<br><br>
@@ -237,16 +237,7 @@
     If results look wrong, enable <em>"Show prompt preview"</em> in the Debug section below and check the raw AI output for issues.
   </div>
 
-  <!-- Background Processing -->
-  <h3>Background Processing</h3>
-
-  <div class="checkbox-row">
-    <input type="checkbox" id="bgProcessingEnabled" />
-    <label for="bgProcessingEnabled">Process emails in the background</label>
-  </div>
-  <div class="hint">Automatically analyze incoming emails so results are instant when you open Auto Analyze. Requires Auto Analyze to be enabled.</div>
-
-  <label for="bgCacheMaxDays">Cache duration</label>
+  <label for="bgCacheMaxDays" id="bgCacheMaxDays-label">Cache duration</label>
   <select id="bgCacheMaxDays">
     <option value="1">1 day (default)</option>
     <option value="3">3 days</option>

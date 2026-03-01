@@ -149,11 +149,12 @@ async function syncAutoAnalyzeVisibility() {
   browser.menus.update("thunderclerk-ai-auto-analyze", { visible: enabled });
   browser.menus.update("thunderclerk-ai-queue-analysis", { visible: enabled });
   browser.menus.update("thunderclerk-ai-sep-4", { visible: enabled });
-  // Enable/disable the message header toolbar button
-  browser.messageDisplayAction.setTitle({
-    title: enabled ? "ThunderClerk-AI: Auto Analyze" : "ThunderClerk-AI: Auto Analyze (disabled in settings)",
-  });
-  browser.messageDisplayAction.enable();
+  // Show/hide the message header toolbar button
+  if (enabled) {
+    browser.messageDisplayAction.enable();
+  } else {
+    browser.messageDisplayAction.disable();
+  }
 }
 syncAutoAnalyzeVisibility();
 
